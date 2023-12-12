@@ -10,47 +10,9 @@ class EventCalculator():
     _f02 = 1
     _a01 = 1
     _gamma50 = 1
-    _newtonG = 6.674e-11 * u.newton * u.m**2 / u.kg**2
-    _speedOfLight = 2.98e8 * u.m / u.s
-    _internalMotionRMS = _speedOfLight / 2
     _dmHaloA = 1.15e9 * u.solMass / u.kpc**(3/4)
     _mwSkyCoordinates = [8 * u.kpc, SkyCoord("17h45m40", "−29d00m28.17s")]
     _mwMass = 1.15e12 * u.solMass
-
-    @property
-    def f02(self):
-        return self._f02
-
-    @property
-    def a01(self):
-        return self._a01
-
-    @property
-    def gamma50(self):
-        return self._gamma50
-
-    @property
-    def newtonG(self):
-        return self._newtonG
-    @property
-    def speedOfLight(self):
-        return self._speedOfLight
-
-    @property
-    def internalMotionRMS(self):
-        return self._internalMotionRMS
-
-    @property
-    def dmHaloA(self):
-        return self._dmHaloA
-
-    @property
-    def mwSkyCoordinates(self):
-        return self._mwSkyCoordinates
-
-    @property
-    def mwMass(self):
-        return self._mwMass
 
     def __init__(self, configDict):
         self.tensions = configDict.get("tensions", np.logspace(-15, -8, num=8))
@@ -113,7 +75,7 @@ class EventCalculator():
         return 10**self._foo(np.log10(self.tensions * 1e15))
 
     def calculateHaloValues(self, hostGalaxyDistance):
-        galaxyMassRatio = self.hostGalaxyMass / self.mwMass
+        galaxyMassRatio = self.hostGalaxyMass / self._mwMass
         haloR1 = (1 / (1 + galaxyMassRatio**(1/3))) * hostGalaxyDistance
         haloC = ((hostGalaxyDistance - haloR1) / haloR1)**(9/4)
         return haloR1, haloC
@@ -139,9 +101,9 @@ class EventCalculator():
         mu13 = self.tensions * 1e13
         speedOfLight = 2.98e8 * u.m / u.s
         xIntegral = 4/3
-        f02 = self.f02
-        a01 = self.a01
-        gamma50 = self.gamma50
+        f02 = self._f02
+        a01 = self._a01
+        gamma50 = self._gamma50
         lg = 0.0206 * gamma50 * mu13 * u.pc
 
         self._modelDMRho(nSteps)
@@ -158,12 +120,12 @@ class EventCalculator():
 
     def _modelDMRho(self, nSteps):
         hostGalaxyCenter = self.skyCoordinatesToCartesian(self.hostGalaxySkyCoordinates)
-        homeGalaxyCenter = self.skyCoordinatesToCartesian(self.mwSkyCoordinates)
+        homeGalaxyCenter = self.skyCoordinatesToCartesian(self._mwSkyCoordinates)
         sourcePositionVector = self.skyCoordinatesToCartesian(self.sourceSkyCoordinates)
         hostGalaxyDistance = np.linalg.norm(hostGalaxyCenter - homeGalaxyCenter)
 
         r1, dmHaloC = self.calculateHaloValues(hostGalaxyDistance)
-        dmHaloA = self.dmHaloA
+        dmHaloA = self._dmHaloA
 
         r = np.array([np.linspace(0 * u.kpc, sourcePositionVector[0], num=nSteps).to(u.kpc),
                       np.linspace(0 * u.kpc, sourcePositionVector[1], num=nSteps).to(u.kpc),
@@ -246,13 +208,13 @@ class EventCalculator():
     def computeMaximumLensingTimes(self, stringTheta=np.pi/4):
         sourceDistance = self.computeSourceDistance()
         deficitAngles = 8 * np.pi * self.tensions
-        return (sourceDistance * deficitAngles * np.sin(stringTheta) / (4 * self.internalMotionRMS)).decompose()
+        return (sourceDistance * deficitAngles * np.sin(stringTheta) / (4 * self._internalMotionRMS)).decompose()
 
     def computeLensingTimeSamples(self, distanceSamples, stringTheta=np.pi/4):
         sourceDistance = self.computeSourceDistance()
         deficitAngles = 8 * np.pi * self.tensions.reshape(8, 1)
         timeSamples = (deficitAngles * np.sin(stringTheta) * distanceSamples
-                       * (1 - (distanceSamples / sourceDistance)) / self.internalMotionRMS).decompose()
+                       * (1 - (distanceSamples / sourceDistance)) / self._internalMotionRMS).decompose()
         return timeSamples
 
     def computeLensingTimePDF(self, stringTheta=np.pi/4, bins=1000):
