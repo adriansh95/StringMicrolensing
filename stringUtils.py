@@ -13,6 +13,7 @@ class EventCalculator():
     _dmHaloA = 1.15e9 * u.solMass / u.kpc**(3/4)
     _mwSkyCoordinates = [8 * u.kpc, SkyCoord("17h45m40", "−29d00m28.17s")]
     _mwMass = 1.15e12 * u.solMass
+    _internalMotionRMS = _speedOfLight / 2
 
     def __init__(self, configDict):
         self.tensions = configDict.get("tensions", np.logspace(-15, -8, num=8))
