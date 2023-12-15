@@ -13,6 +13,7 @@ class EventCalculator():
     _dmHaloA = 1.15e9 * u.solMass / u.kpc**(3/4)
     _mwSkyCoordinates = [8 * u.kpc, SkyCoord("17h45m40", "−29d00m28.17s")]
     _mwMass = 1.15e12 * u.solMass
+    _speedOfLight = 2.98e8 * u.m / u.s
     _internalMotionRMS = _speedOfLight / 2
 
     def __init__(self, configDict):
@@ -100,7 +101,6 @@ class EventCalculator():
 
     def calculate(self, nSteps=10000):
         mu13 = self.tensions * 1e13
-        speedOfLight = 2.98e8 * u.m / u.s
         xIntegral = 4/3
         f02 = self._f02
         a01 = self._a01
@@ -113,7 +113,7 @@ class EventCalculator():
         # Integrate F(r)dr
         enhancementIntegral = integrate.trapz(self.results["enhancementFactor"],
                                               axis=1, dx=self.results["rStepSize"])
-        eventRates = (0.2 * lg * speedOfLight * self.curlyG * 1.15e-6 * xIntegral
+        eventRates = (0.2 * lg * self._speedOfLight * self.curlyG * 1.15e-6 * xIntegral
                      * (f02 * np.sqrt(a01) / (gamma50 * mu13)**(3/2)) *
                      enhancementIntegral * u.kpc**(-3))
         self.results["eventRates"] = eventRates
