@@ -172,7 +172,7 @@ class EventCalculator():
 
     def sampleDistances(self, seed=None, nSamples=10000, plot=False):
         cdf = (np.cumsum(self.results["enhancementFactor"], axis=1) /
-               self.results["enhancementFactor"].sum(axis=1).reshape(8, 1))
+               self.results["enhancementFactor"].sum(axis=1).reshape(len(self.tensions), 1))
 
         distanceFromObserver = (self.results["lineOfSight"] -
                                 self.results["lineOfSight"][0])
@@ -212,7 +212,7 @@ class EventCalculator():
 
     def computeLensingTimeSamples(self, distanceSamples, stringTheta=np.pi/4):
         sourceDistance = self.computeSourceDistance()
-        deficitAngles = 8 * np.pi * self.tensions.reshape(8, 1)
+        deficitAngles = 8 * np.pi * self.tensions.reshape(len(self.tensions), 1)
         timeSamples = (deficitAngles * np.sin(stringTheta) * distanceSamples
                        * (1 - (distanceSamples / sourceDistance)) / self._internalMotionRMS).decompose()
         return timeSamples
@@ -281,7 +281,7 @@ class ExperimentExpectationsCalculator():
         observableWindowDuration = experimentDuration + lensingTimeBinMiddles
 
         #(tensions, nLensingTimes) nEvents of duration t expected
-        lam = (self.eventCalculator.results["eventRates"].reshape(8, 1)
+        lam = (self.eventCalculator.results["eventRates"].reshape(len(self.tensions), 1)
                * observableWindowDuration * lensingTimesPDF).decompose()
 
         # (tensions, nLensingTimes) P(event of duration t overlaps with survey | event of duration t)
