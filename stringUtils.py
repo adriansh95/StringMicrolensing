@@ -282,7 +282,7 @@ class ExperimentExpectationsCalculator():
         observableWindowDuration = experimentDuration + lensingTimeBinMiddles
 
         #(tensions, nLensingTimes) nEvents of duration t expected
-        lam = (self.eventCalculator.results["eventRates"].reshape(len(self.tensions), 1)
+        lam = (self.eventCalculator.results["eventRates"].reshape(len(self.eventCalculator.tensions), 1)
                * observableWindowDuration * lensingTimesPDF).decompose()
 
         # (tensions, nLensingTimes) P(event of duration t overlaps with survey | event of duration t)
