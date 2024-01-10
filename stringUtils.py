@@ -153,7 +153,7 @@ class EventCalculator():
                                          dmHaloC * dmHaloA / hostGalaxyDistance**(9/4))
 
     def plotEnhancement(self, title=None):
-        fig, ax = plt.subplots(1, 1, sharex=True, figsize=(12, 8))
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
         colors = cm.gist_rainbow(np.linspace(0, 1, num=len(self.tensions)))
 
         enhancement = self.results["enhancementFactor"]
