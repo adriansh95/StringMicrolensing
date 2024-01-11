@@ -218,6 +218,12 @@ class EventCalculator():
                        * (1 - (distanceSamples / sourceDistance)) / self._internalMotionRMS).decompose()
         return timeSamples
 
+    def computeDistancePDF(self):
+        pdf = enhancementFactors = self.results["enhancementFactor"]
+        pdf /= pdf.sum(axis=1)
+
+        return pdf
+
     def computeLensingTimePDF(self, stringTheta=np.pi/4, bins=1000):
         enhancementFactors = self.results["enhancementFactor"]
         distances = np.linalg.norm(self.results["lineOfSight"], axis=0)
