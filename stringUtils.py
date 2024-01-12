@@ -219,8 +219,9 @@ class EventCalculator():
         return timeSamples
 
     def computeDistancePDF(self):
-        pdf = enhancementFactors = self.results["enhancementFactor"]
-        pdf /= pdf.sum(axis=1)
+        enhancementFactor = self.results["enhancementFactor"]
+        norm = enhancementFactor.sum(axis=1).reshape((enhancementFactor.shape[0], 1))
+        pdf = enhancementFactor / norm
 
         return pdf
 
