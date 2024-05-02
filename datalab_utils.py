@@ -5,22 +5,8 @@ from scipy.stats import gaussian_kde
 from scipy.signal import argrelextrema
 from sklearn.neighbors import KernelDensity
 
-def weighted_mean(vals, weights):
-    w_sum = weights.sum()
-    result = (vals * weights).sum() / w_sum
-    return result
-
 def weighted_std(vals, weights):
-    n_weights = weights.size
-    w_sum = weights.sum()
-    w_mean = weighted_mean(vals, weights)
-    result = np.sqrt(n_weights * (weights * np.power(vals - w_mean, 2)).sum() /
-                     ((n_weights - 1) * w_sum))
-    return result
-
-def weighted_mean_error(weights):
-    w_sum = weights.sum()
-    result = np.sqrt(1 / w_sum)
+    result = np.sqrt(np.cov(vals, aweights=weights).item())
     return result
 
 def kde_pdf(samples, weights, bandwidth):
@@ -72,7 +58,7 @@ def _label_cluster_type(samples, weights, kde_result):
         n_bright, n_baseline = len(samples_bright), len(samples_baseline)
 
         if (n_baseline > 2 * n_bright) and (n_bright >= 2):
-            weighted_mu = weighted_mean(samples_baseline, weights_baseline)
+            weighted_mu = np.average(samples_baseline, weights=weights_baseline)
             weighted_sigma = weighted_std(samples_baseline, weights_baseline)
             errs_bright = np.power(weights_bright, -2)
             delta = weighted_mu - samples_bright
@@ -109,11 +95,7 @@ def _kde_cluster_label(df, mag_column, magerr_column, bandwidth):
 def _cl_transform(s, bandwidth):
     samples = s.transform(lambda x: x[0]).values
     weights = np.power(s.transform(lambda x: x[1]).values, -2)
-    try:
-        kde_result = kde_pdf(samples, weights, bandwidth)
-    except ValueError:
-        print(s.index)
-        raise ValueError
+    kde_result = kde_pdf(samples, weights, bandwidth)
     cluster_type = _label_cluster_type(samples, weights, kde_result)
 
     if cluster_type == -1:
@@ -137,7 +119,34 @@ def cluster_label_dataframe(df, mag_column="mag_auto",
     result = pd.DataFrame(d)
     return result
 
+def filter_cluster_labelled_df(df, time_column="mjd"):
+    result = df.groupby(by=["objectid"]).filter(_filter_cl_df)
+    return result
+    
+def _filter_cl_df(df):
+    result = False
+    condition1 = ~((df["cluster_label"] == -1).any())
+    condition2 = (df["cluster_label"] == 0).any()
+
+    if condition1 and condition2:
+        mask_baseline = df["cluster_label"] == 1    
+        n_total = len(df)
+        n_bright = len(df[~mask_baseline])
+        idxs = np.arange(n_total)
+        baseline_idxs = idxs[mask_baseline]
+        idx_diffs = np.diff(baseline_idxs)
+        boundary_idxs = np.where(idx_diffs == (n_bright + 1))[0]
+        case1 = len(boundary_idxs) == 1
+        case2 = baseline_idxs[0] == n_bright
+        case3 = (n_total - 1) - baseline_idxs[-1] == n_bright
+
+        if case1 or case2 or case3:
+            result = True
+
+    return result
+
 def make_lensing_dataframe(df, time_column="mjd", exp_time_column="exptime"):
+    """This function assumes the dataframe has been sorted by the time_column"""
     df_grouped = df.groupby(by=["objectid"])
     s = df_grouped.apply(_lens_apply, time_column, exp_time_column)
     s.name = "lens_data"
@@ -146,17 +155,16 @@ def make_lensing_dataframe(df, time_column="mjd", exp_time_column="exptime"):
     result['t_end'] = result["lens_data"].transform(lambda x: x.get('t_end'))
     result['filters'] = result["lens_data"].transform(lambda x: x.get('filters'))
     result.drop(columns="lens_data", inplace=True, axis=1)
+    result.dropna(inplace=True)
     return result
 
 def _lens_apply(df, time_column, exp_time_column):
     result = {"t_start": np.nan, "t_end": np.nan, "filters": np.nan}
-    
     s_per_day = 86400
     condition1 = ~((df["cluster_label"] == -1).any())
     condition2 = (df["cluster_label"] == 0).any()
 
     if condition1 and condition2:
-        df = df.sort_values(by=[time_column])
         mask_baseline = df["cluster_label"] == 1    
         n_total = len(df)
         n_bright = len(df[~mask_baseline])
@@ -184,47 +192,7 @@ def _lens_apply(df, time_column, exp_time_column):
         if case1 or case2 or case3:
             lensed_idxs = np.arange(idx0 + 1, idx1)
             filters = ''.join(sorted(df.iloc[lensed_idxs]["filter"]))
-            result = {"t_start": t_start, "t_end": t_end, "filters": filters}
-
-    return result
-
-# Rename this function, it doesn't return a dict
-def _make_lensing_dict(df, time_column, exp_time_column):
-    result = pd.DataFrame(data={"t_start": np.nan, "t_end": np.nan, "filters": np.nan}, index=[0])
-    
-    s_per_day = 86400
-    condition1 = ~((df["cluster_label"] == -1).any())
-    condition2 = (df["cluster_label"] == 0).any()
-
-    if condition1 and condition2:
-        df = df.sort_values(by=[time_column])
-        mask_baseline = df["cluster_label"] == 1    
-        n_total = len(df)
-        n_bright = len(df[~mask_baseline])
-        idxs = np.arange(n_total)
-        baseline_idxs = idxs[mask_baseline]
-        idx_diffs = np.diff(baseline_idxs)
-        boundary_idxs = np.where(idx_diffs == (n_bright + 1))[0]
-        case1 = len(boundary_idxs) == 1
-        case2 = baseline_idxs[0] == n_bright
-        case3 = (n_total - 1) - baseline_idxs[-1] == n_bright
-
-        if case1:
-            idx0, idx1 = baseline_idxs[boundary_idxs[0]], baseline_idxs[boundary_idxs[0] + 1]
-            t_start = df.iloc[idx0][time_column] + (df.iloc[idx0][exp_time_column] / s_per_day)
-            t_end = df.iloc[idx1][time_column]
-        elif case2:
-            idx0, idx1 = -1, baseline_idxs[0]
-            t_start = np.nan
-            t_end = df.iloc[idx1][time_column]
-        elif case3:
-            idx0, idx1 = baseline_idxs[-1], n_total
-            t_start = df.iloc[idx0][time_column] + (df.iloc[idx0][exp_time_column] / s_per_day)
-            t_end = np.nan
-
-        if case1 or case2 or case3:
-            lensed_idxs = np.arange(idx0 + 1, idx1)
-            filters = ''.join(sorted(df.iloc[lensed_idxs]["filter"]))
-            result = pd.DataFrame(data={"t_start": t_start, "t_end": t_end, "filters": filters}, index=[0])
+            exposures = df.iloc[lensed_idxs]["exposure"].values
+            result = {"t_start": t_start, "t_end": t_end, "filters": filters, "exposures": exposures}
 
     return result
