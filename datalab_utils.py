@@ -56,7 +56,7 @@ def _label_cluster_type(samples, weights, kde_result, tolerance):
         weights_baseline = weights[mask_baseline]
         n_bright, n_baseline = len(samples_bright), len(samples_baseline)
 
-        if (n_baseline > 2 * n_bright) and (n_bright >= 2):
+        if (n_baseline > 2 * n_bright):
             weighted_mu = np.average(samples_baseline, weights=weights_baseline)
             weighted_sigma = weighted_std(samples_baseline, weights_baseline)
             errs_bright = np.power(weights_bright, -2)
@@ -101,13 +101,13 @@ def _cl_apply(df, bandwidth, tolerance):
 
 def lens_filter(df):
     result = False
+    n_bright = sum(df["cluster_label"] == 0)
     condition1 = ~((df["cluster_label"] == -1).any())
-    condition2 = (df["cluster_label"] == 0).any()
+    condition2 = n_bright > 1
 
     if condition1 and condition2:
         mask_baseline = df["cluster_label"] == 1    
         n_total = len(df)
-        n_bright = len(df[~mask_baseline])
         idxs = np.arange(n_total)
         baseline_idxs = idxs[mask_baseline]
         idx_diffs = np.diff(baseline_idxs)
@@ -152,6 +152,7 @@ def _lens_apply(df):
         t_end_idx = idx_range[mask_bright].max() + 1
         t_start = df.iat[t_start_idx, 1] + (df.iat[t_start_idx, 2] / s_per_day)
         t_end = df.iat[t_end_idx, 1]
+
     filters = ''.join(df.loc[mask_bright, "filter"])
     result = pd.DataFrame(data={"t_start": [t_start], "t_end": [t_end], "filters": [filters]})
     return result
