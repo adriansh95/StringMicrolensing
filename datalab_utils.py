@@ -40,7 +40,6 @@ def _label_cluster_type(samples, weights, kde_result, tolerance):
     maxima = find_peaks(pdf)[0]
     minima = find_peaks(-pdf)[0]
     n_maxima = len(maxima)
-
     if n_maxima == 1:
         weighted_sigma = weighted_std(samples, weights)
 
@@ -67,8 +66,8 @@ def _label_cluster_type(samples, weights, kde_result, tolerance):
             tol2 = (samples_bright < weighted_mu + high_cutoff)
             condition1 = all(tol1 & tol2)
             condition2 = (weighted_sigma <= sigma_cutoff)
-#             condition3 = all(delta_significance >= 5)
-            condition3 = all(delta_significance >= 3) #DELETE ME
+            condition3 = all(delta_significance >= 5)
+#             condition3 = all(delta_significance >= 3) #DELETE ME
 
             if condition1 and condition2 and condition3:
                 result = 2
@@ -78,7 +77,7 @@ def _label_cluster_type(samples, weights, kde_result, tolerance):
 def cluster_label_dataframe(df, 
                             mag_column="mag_auto", 
                             magerr_column="magerr_auto", 
-                            bandwidth=0.1254,
+                            bandwidth=0.11,
                             tolerance=(1.7, 2.3)):
     g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"])
     cluster_label = g.apply(_cl_apply, bandwidth, tolerance)
