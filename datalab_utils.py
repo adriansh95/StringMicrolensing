@@ -4,6 +4,8 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 from scipy.signal import find_peaks
 
+FLUX_DOUBLE = -2.5 * np.log10(2)
+
 def weighted_std(vals, weights):
     result = np.sqrt(np.cov(vals, aweights=weights).item())
     return result
@@ -31,15 +33,14 @@ def label_cluster_membership(samples, kde_result):
 
     return result
 
-def _label_cluster_type(samples, weights, kde_result, tolerance):
+def _label_cluster_type(samples, weights, kde_result):
     result = -1
     pdf, x = kde_result["pdf"], kde_result["x"]
-    a, b = tolerance
-    high_cutoff, low_cutoff = -2.5 * np.log10(a), -2.5 * np.log10(b)
     sigma_cutoff = 2.5 * np.log10(1.7) / 5
     maxima = find_peaks(pdf)[0]
     minima = find_peaks(-pdf)[0]
     n_maxima = len(maxima)
+
     if n_maxima == 1:
         weighted_sigma = weighted_std(samples, weights)
 
@@ -62,14 +63,15 @@ def _label_cluster_type(samples, weights, kde_result, tolerance):
             delta = weighted_mu - samples_bright
             delta_sigma = errs_bright + weighted_sigma
             delta_significance = delta / delta_sigma
-            tol1 = (weighted_mu + low_cutoff < samples_bright)
-            tol2 = (samples_bright < weighted_mu + high_cutoff)
+            tol1 = (weighted_mu + FLUX_DOUBLE + 5 * weighted_sigma < samples_bright)
+            tol2 = (samples_bright < weighted_mu + FLUX_DOUBLE - 5 * weighted_sigma)
             condition1 = all(tol1 & tol2)
             condition2 = (weighted_sigma <= sigma_cutoff)
             condition3 = all(delta_significance >= 5)
 #             condition3 = all(delta_significance >= 3) #DELETE ME
 
             if condition1 and condition2 and condition3:
+#             if condition2 and condition3:
                 result = 2
 
     return result
@@ -77,19 +79,18 @@ def _label_cluster_type(samples, weights, kde_result, tolerance):
 def cluster_label_dataframe(df, 
                             mag_column="mag_auto", 
                             magerr_column="magerr_auto", 
-                            bandwidth=0.11,
-                            tolerance=(1.7, 2.3)):
+                            bandwidth=0.11):
     g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"])
-    cluster_label = g.apply(_cl_apply, bandwidth, tolerance)
+    cluster_label = g.apply(_cl_apply, bandwidth)
     result = df.assign(cluster_label=cluster_label)
     return result
 
-def _cl_apply(df, bandwidth, tolerance):
+def _cl_apply(df, bandwidth):
     samples = df[df.columns[2]].values
     weights = np.power(df[df.columns[3]].values, -2)
     idxs = df.index
     kde_result = kde_pdf(samples, weights, bandwidth)
-    cluster_type = _label_cluster_type(samples, weights, kde_result, tolerance)
+    cluster_type = _label_cluster_type(samples, weights, kde_result)
 
     if cluster_type == -1:
         result = np.full(len(samples), -1)
