@@ -36,43 +36,45 @@ def label_cluster_membership(samples, kde_result):
 def _label_cluster_type(samples, weights, kde_result):
     result = -1
     pdf, x = kde_result["pdf"], kde_result["x"]
-    sigma_cutoff = 2.5 * np.log10(1.7) / 5
     maxima = find_peaks(pdf)[0]
-    minima = find_peaks(-pdf)[0]
     n_maxima = len(maxima)
 
     if n_maxima == 1:
-        weighted_sigma = weighted_std(samples, weights)
-
-        if weighted_sigma <= sigma_cutoff:
-            result = 1
+        result = 1
 
     elif n_maxima == 2:
+        minima = find_peaks(-pdf)[0]
         mask_bright = samples < x[minima[0]]
         mask_baseline = samples > x[minima[0]]
-        samples_bright = samples[mask_bright]
-        weights_bright = weights[mask_bright]
-        samples_baseline = samples[mask_baseline]
-        weights_baseline = weights[mask_baseline]
-        n_bright, n_baseline = len(samples_bright), len(samples_baseline)
+        more_bright = sum(mask_bright) > sum(mask_baseline)
 
-        if (n_baseline > 2 * n_bright):
-            weighted_mu = np.average(samples_baseline, weights=weights_baseline)
-            weighted_sigma = weighted_std(samples_baseline, weights_baseline)
-            errs_bright = np.power(weights_bright, -2)
-            delta = weighted_mu - samples_bright
-            delta_sigma = errs_bright + weighted_sigma
-            delta_significance = delta / delta_sigma
-            tol1 = (weighted_mu + FLUX_DOUBLE + 5 * weighted_sigma < samples_bright)
-            tol2 = (samples_bright < weighted_mu + FLUX_DOUBLE - 5 * weighted_sigma)
-            condition1 = all(tol1 & tol2)
-            condition2 = (weighted_sigma <= sigma_cutoff)
-            condition3 = all(delta_significance >= 5)
-#             condition3 = all(delta_significance >= 3) #DELETE ME
+        if more_bright:
+            mask_use = mask_bright
+            mask_compare = mask_baseline
+            flux_double = -FLUX_DOUBLE
+        else:
+            mask_use = mask_baseline
+            mask_compare = mask_bright
+            flux_double = FLUX_DOUBLE
 
-            if condition1 and condition2 and condition3:
-#             if condition2 and condition3:
-                result = 2
+        samples_use = samples[mask_use]
+        weights_use = weights[mask_use]
+        samples_compare = samples[mask_compare]
+        weights_compare = weights[mask_compare]
+        weighted_mu = np.average(samples_use, weights=weights_use)
+        weighted_sigma = weighted_std(samples_use, weights_use)
+        errs_compare = np.power(weights_compare, -2)
+        delta = np.abs(weighted_mu - samples_compare)
+        delta_sigma = errs_compare + weighted_sigma
+        delta_significance = delta / delta_sigma
+        above_lower_bound = (weighted_mu + flux_double - 5 * weighted_sigma < samples_compare)
+        below_upper_bound = (samples_compare < weighted_mu + flux_double + 5 * weighted_sigma)
+        within_bounds = all(above_lower_bound & below_upper_bound)
+        significant_difference = all(delta_significance >= 5)
+#         significant_difference = all(delta_significance >= 3) #DELETE ME
+
+        if within_bounds and significant_difference:
+            result = 2
 
     return result
 
