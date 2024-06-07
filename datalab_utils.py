@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
@@ -20,28 +19,26 @@ def kde_pdf(samples, weights, bandwidth):
     result = {"pdf": pdf, "x": x}
     return result
 
-def label_cluster_membership(samples, kde_result):
-    pdf, x = kde_result["pdf"], kde_result["x"]
-    maxima = find_peaks(pdf)[0]
-    minima = find_peaks(-pdf)[0]
-    n_maxima = len(maxima)
+def label_cluster_membership(samples, cluster_type):
+    cl_type = cluster_type["type"]
 
-    if n_maxima == 1:
+    if cl_type == -1:
+        result = np.full(samples.shape, -1)
+    elif cl_type == 1:
         result = np.full(samples.shape, 1)
     else:
-        result = np.where(samples > x[minima[0]], 1, 0)
+        result = np.where(samples > cluster_type["min"], 1, 0)
 
     return result
 
 def _label_cluster_type(samples, weights, kde_result):
-    result = -1
+    result = {"type": -1, "min": None}
     pdf, x = kde_result["pdf"], kde_result["x"]
     maxima = find_peaks(pdf)[0]
     n_maxima = len(maxima)
 
     if n_maxima == 1:
-        result = 1
-
+        result = {"type": 1, "min": None}
     elif n_maxima == 2:
         minima = find_peaks(-pdf)[0]
         mask_bright = samples < x[minima[0]]
@@ -71,10 +68,9 @@ def _label_cluster_type(samples, weights, kde_result):
         below_upper_bound = (samples_compare < weighted_mu + flux_double + 5 * weighted_sigma)
         within_bounds = all(above_lower_bound & below_upper_bound)
         significant_difference = all(delta_significance >= 5)
-#         significant_difference = all(delta_significance >= 3) #DELETE ME
 
         if within_bounds and significant_difference:
-            result = 2
+            result = {"type": 2, "min": x[minima[0]]}
 
     return result
 
@@ -93,12 +89,7 @@ def _cl_apply(df, bandwidth):
     idxs = df.index
     kde_result = kde_pdf(samples, weights, bandwidth)
     cluster_type = _label_cluster_type(samples, weights, kde_result)
-
-    if cluster_type == -1:
-        result = np.full(len(samples), -1)
-    else:
-        result = label_cluster_membership(samples, kde_result)
-
+    result = label_cluster_membership(samples, cluster_type)
     return pd.DataFrame(data=result, index=idxs)
 
 def lens_filter(df):
