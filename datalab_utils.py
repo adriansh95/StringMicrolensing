@@ -19,57 +19,60 @@ def kde_pdf(samples, weights, bandwidth):
     result = {"pdf": pdf, "x": x}
     return result
 
-def label_cluster_membership(samples, cluster_type):
-    cl_type = cluster_type["type"]
+def label_cluster_membership(samples, cluster_type, minima):
 
-    if cl_type == -1:
+    if cluster_type == -1:
         result = np.full(samples.shape, -1)
-    elif cl_type == 1:
+    elif cluster_type == 1:
         result = np.full(samples.shape, 1)
     else:
-        result = np.where(samples > cluster_type["min"], 1, 0)
+        result = np.where(samples > minima, 1, 0)
 
     return result
 
+def _is_cluster_type_2(samples, weights, x_min):
+    mask_bright = samples < x_min
+    mask_baseline = samples > x_min
+    more_bright = sum(mask_bright) > sum(mask_baseline)
+
+    if more_bright:
+        mask_use = mask_bright
+        mask_compare = mask_baseline
+        flux_double = -FLUX_DOUBLE
+    else:
+        mask_use = mask_baseline
+        mask_compare = mask_bright
+        flux_double = FLUX_DOUBLE
+
+    samples_use = samples[mask_use]
+    weights_use = weights[mask_use]
+    samples_compare = samples[mask_compare]
+    weights_compare = weights[mask_compare]
+    weighted_mu = np.average(samples_use, weights=weights_use)
+    weighted_sigma = weighted_std(samples_use, weights_use)
+    errs_compare = np.power(weights_compare, -2)
+    delta = np.abs(weighted_mu - samples_compare)
+    delta_sigma = errs_compare + weighted_sigma
+    delta_significance = delta / delta_sigma
+    above_lower_bound = (weighted_mu + flux_double - 5 * weighted_sigma < samples_compare)
+    below_upper_bound = (samples_compare < weighted_mu + flux_double + 5 * weighted_sigma)
+    within_bounds = (np.logical_and(above_lower_bound, below_upper_bound)).all()
+    significant_difference = (delta_significance >= 5).all()
+    result = within_bounds and significant_difference
+    return result
+
 def _label_cluster_type(samples, weights, kde_result):
-    result = {"type": -1, "min": None}
+    result = {"type": -1, "min": np.nan}
     pdf, x = kde_result["pdf"], kde_result["x"]
     maxima = find_peaks(pdf)[0]
     n_maxima = len(maxima)
 
     if n_maxima == 1:
-        result = {"type": 1, "min": None}
+        result = {"type": 1, "min": np.nan}
     elif n_maxima == 2:
         minima = find_peaks(-pdf)[0]
-        mask_bright = samples < x[minima[0]]
-        mask_baseline = samples > x[minima[0]]
-        more_bright = sum(mask_bright) > sum(mask_baseline)
 
-        if more_bright:
-            mask_use = mask_bright
-            mask_compare = mask_baseline
-            flux_double = -FLUX_DOUBLE
-        else:
-            mask_use = mask_baseline
-            mask_compare = mask_bright
-            flux_double = FLUX_DOUBLE
-
-        samples_use = samples[mask_use]
-        weights_use = weights[mask_use]
-        samples_compare = samples[mask_compare]
-        weights_compare = weights[mask_compare]
-        weighted_mu = np.average(samples_use, weights=weights_use)
-        weighted_sigma = weighted_std(samples_use, weights_use)
-        errs_compare = np.power(weights_compare, -2)
-        delta = np.abs(weighted_mu - samples_compare)
-        delta_sigma = errs_compare + weighted_sigma
-        delta_significance = delta / delta_sigma
-        above_lower_bound = (weighted_mu + flux_double - 5 * weighted_sigma < samples_compare)
-        below_upper_bound = (samples_compare < weighted_mu + flux_double + 5 * weighted_sigma)
-        within_bounds = all(above_lower_bound & below_upper_bound)
-        significant_difference = all(delta_significance >= 5)
-
-        if within_bounds and significant_difference:
+        if _is_cluster_type_2(samples, weights, x[minima[0]]):
             result = {"type": 2, "min": x[minima[0]]}
 
     return result
@@ -89,7 +92,7 @@ def _cl_apply(df, bandwidth):
     idxs = df.index
     kde_result = kde_pdf(samples, weights, bandwidth)
     cluster_type = _label_cluster_type(samples, weights, kde_result)
-    result = label_cluster_membership(samples, cluster_type)
+    result = label_cluster_membership(samples, cluster_type["type"], cluster_type["min"])
     return pd.DataFrame(data=result, index=idxs)
 
 def lens_filter(df):
@@ -161,4 +164,47 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
     baseline = np.average(samples_baseline, weights=weights_baseline)
     result = df.assign(delta_mag=df[mag_column] - baseline)
+    return result
+
+@njit
+def _find_t_next_other_filter(i, mjds, filters):
+    this_filter = filters[i]
+    result = np.inf
+
+    for j in range(i + 1, len(mjds)):
+
+        if filters[j] != this_filter:
+            result = mjds[j]
+            break
+
+    return result
+
+@njit
+def _measure_time(t_this, t_floor, t_next_other_filter, taus):
+    t = np.maximum(t_floor, t_next_other_filter)
+    result = np.maximum(t_this + taus - t, 0)
+    return result
+
+@njit
+def _compute_t_floor(t_this, taus, t_next_other_filter):
+    result = np.maximum(t_this + taus, t_next_other_filter)
+    return result
+
+def measure_lensable_time(df, taus):
+    filters = df["filter"].values.astype("U1")
+    mjds = df["mjd"].values
+    t_floor = np.zeros(taus.shape)
+    result = np.zeros(taus.shape)
+
+    for i in range(len(df)):
+        t_this = mjds[i]
+        t_next_other_filter = _find_t_next_other_filter(i, mjds, filters)
+
+        if np.isfinite(t_next_other_filter):
+            result += _measure_time(t_this, t_floor, t_next_other_filter, taus)
+        else:
+            break
+
+        t_floor = _compute_t_floor(t_this, taus, t_next_other_filter)
+
     return result
