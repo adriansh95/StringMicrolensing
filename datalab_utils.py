@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import gaussian_kde
 from scipy.signal import find_peaks
+from numba import njit
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
 
@@ -24,7 +25,7 @@ def label_cluster_membership(samples, cluster_type, minima):
     if cluster_type == -1:
         result = np.full(samples.shape, -1)
     elif cluster_type == 1:
-        result = np.full(samples.shape, 1)
+        result = np.full(samples.shape, 2)
     else:
         result = np.where(samples > minima, 1, 0)
 
@@ -81,7 +82,7 @@ def cluster_label_dataframe(df,
                             mag_column="mag_auto", 
                             magerr_column="magerr_auto", 
                             bandwidth=0.11):
-    g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"])
+    g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"], sort=False)
     cluster_label = g.apply(_cl_apply, bandwidth)
     result = df.assign(cluster_label=cluster_label)
     return result
@@ -97,11 +98,34 @@ def _cl_apply(df, bandwidth):
 
 def lens_filter(df):
     result = False
-    n_bright = sum(df["cluster_label"] == 0)
-    condition1 = ~((df["cluster_label"] == -1).any())
-    condition2 = n_bright > 1
+    cl = df["cluster_label"].values
+    mask_twos = cl == 2
+    n_zeros = sum(cl == 0)
+    condition1 = ~((cl == -1).any())
+    condition2 = n_zeros > 0
 
     if condition1 and condition2:
+        
+        if (cl == 2).any():
+            looks_lensed = [False] * 2
+
+            for i in range(2):
+                df.loc[mask_twos, "cluster_label"] = i
+                looks_lensed[i] = _looks_lensed(df)
+
+            df["cluster_label"] = cl
+            result = any(looks_lensed)
+
+        else:
+            result = _looks_lensed(df)
+
+    return result
+
+def _looks_lensed(df):
+    result = False
+    n_bright = sum(df["cluster_label"] == 0)
+
+    if n_bright > 1:
         mask_baseline = df["cluster_label"] == 1    
         n_total = len(df)
         idxs = np.arange(n_total)
@@ -112,7 +136,7 @@ def lens_filter(df):
         case2 = baseline_idxs[0] == n_bright
         case3 = (n_total - 1) - baseline_idxs[-1] == n_bright
 
-        if case1 or case2 or case3:
+        if any([case1, case2, case3]):
             result = True
 
     return result
@@ -121,7 +145,7 @@ def make_lensing_dataframe(df, time_column="mjd", exp_time_column="exptime"):
     """This function assumes the dataframe has been sorted by the time_column
     and filtered using lens_filter"""
     column_list = ["objectid", time_column, exp_time_column, "cluster_label", "filter"]
-    df_grouped = df[column_list].groupby(by=["objectid"])
+    df_grouped = df[column_list].groupby(by=["objectid"], sort=False)
     result = df_grouped.apply(_lens_apply)
     result.reset_index(level=1, inplace=True, drop=True)
     return result
@@ -154,7 +178,7 @@ def _lens_apply(df):
     return result
 
 def subtract_baseline(df, mag_column="mag_auto", magerr_column="magerr_auto"):
-    df_grouped = df.groupby(by=["objectid", "filter"], group_keys=False)
+    df_grouped = df.groupby(by=["objectid", "filter"], group_keys=False, sort=False)
     result = df_grouped.apply(_subtract_baseline_apply, mag_column, magerr_column)
     return result
 
@@ -190,21 +214,32 @@ def _compute_t_floor(t_this, taus, t_next_other_filter):
     result = np.maximum(t_this + taus, t_next_other_filter)
     return result
 
-def measure_lensable_time(df, taus):
-    filters = df["filter"].values.astype("U1")
-    mjds = df["mjd"].values
+def _measure_time_apply(df, taus, column_list):
+    object_id = df.iloc[0, 0]
+    filters = df[column_list[1]].values.astype("U1")
+    mjds = df[column_list[2]].values
     t_floor = np.zeros(taus.shape)
-    result = np.zeros(taus.shape)
+    times = np.zeros(taus.shape)
 
-    for i in range(len(df)):
+    for i in range(len(df) - 1):
         t_this = mjds[i]
         t_next_other_filter = _find_t_next_other_filter(i, mjds, filters)
 
         if np.isfinite(t_next_other_filter):
-            result += _measure_time(t_this, t_floor, t_next_other_filter, taus)
+            times += _measure_time(t_this, t_floor, t_next_other_filter, taus)
         else:
             break
 
         t_floor = _compute_t_floor(t_this, taus, t_next_other_filter)
 
+    result = pd.DataFrame(data={"lensable_time": times}, index=taus)
+    return result
+
+def measure_lensable_time(df, taus, filter_column="filter", mjd_column="mjd"):
+    column_list = ["objectid", filter_column, mjd_column]
+    result = df[column_list].groupby(by="objectid", sort=False).apply(_measure_time_apply, taus, column_list)
+    return result
+
+def unimodal_filter(df):
+    result = (df["cluster_label"] == 2).all()
     return result
