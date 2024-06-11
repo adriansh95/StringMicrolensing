@@ -31,19 +31,29 @@ def label_cluster_membership(samples, cluster_type, minima):
 
     return result
 
-def _is_cluster_type_2(samples, weights, x_min):
+def _is_cluster_type_2(samples, weights, bandwidth, x_min):
     mask_bright = samples < x_min
-    mask_baseline = samples > x_min
+    mask_baseline = ~mask_bright
+    samples[mask_bright] -= FLUX_DOUBLE
+    kde_result = kde_pdf(samples, weights, bandwidth)  
+    pdf, x = kde_result["pdf"], kde_result["x"]
+    maxima = find_peaks(pdf)[0]
+    n_maxima = len(maxima)
+
+    if n_maxima == 1:
+        unimodal_shifted = True
+    else:
+        unimodal_shifted = False
+
+    samples[mask_bright] += FLUX_DOUBLE
     more_bright = sum(mask_bright) > sum(mask_baseline)
 
     if more_bright:
         mask_use = mask_bright
         mask_compare = mask_baseline
-        flux_double = -FLUX_DOUBLE
     else:
         mask_use = mask_baseline
         mask_compare = mask_bright
-        flux_double = FLUX_DOUBLE
 
     samples_use = samples[mask_use]
     weights_use = weights[mask_use]
@@ -55,14 +65,12 @@ def _is_cluster_type_2(samples, weights, x_min):
     delta = np.abs(weighted_mu - samples_compare)
     delta_sigma = errs_compare + weighted_sigma
     delta_significance = delta / delta_sigma
-    above_lower_bound = (weighted_mu + flux_double - 5 * weighted_sigma < samples_compare)
-    below_upper_bound = (samples_compare < weighted_mu + flux_double + 5 * weighted_sigma)
-    within_bounds = (np.logical_and(above_lower_bound, below_upper_bound)).all()
     significant_difference = (delta_significance >= 5).all()
-    result = within_bounds and significant_difference
+    result = unimodal_shifted and significant_difference
     return result
 
-def _label_cluster_type(samples, weights, kde_result):
+def _label_cluster_type(samples, weights, bandwidth):
+    kde_result = kde_pdf(samples, weights, bandwidth)  
     result = {"type": -1, "min": np.nan}
     pdf, x = kde_result["pdf"], kde_result["x"]
     maxima = find_peaks(pdf)[0]
@@ -73,7 +81,7 @@ def _label_cluster_type(samples, weights, kde_result):
     elif n_maxima == 2:
         minima = find_peaks(-pdf)[0]
 
-        if _is_cluster_type_2(samples, weights, x[minima[0]]):
+        if _is_cluster_type_2(samples, weights, bandwidth, x[minima[0]]):
             result = {"type": 2, "min": x[minima[0]]}
 
     return result
@@ -91,8 +99,7 @@ def _cl_apply(df, bandwidth):
     samples = df[df.columns[2]].values
     weights = np.power(df[df.columns[3]].values, -2)
     idxs = df.index
-    kde_result = kde_pdf(samples, weights, bandwidth)
-    cluster_type = _label_cluster_type(samples, weights, kde_result)
+    cluster_type = _label_cluster_type(samples, weights, bandwidth)
     result = label_cluster_membership(samples, cluster_type["type"], cluster_type["min"])
     return pd.DataFrame(data=result, index=idxs)
 
