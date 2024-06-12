@@ -6,10 +6,6 @@ from numba import njit
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
 
-def weighted_std(vals, weights):
-    result = np.sqrt(np.cov(vals, aweights=weights).item())
-    return result
-
 def kde_pdf(samples, weights, bandwidth):
     kde = gaussian_kde(samples, bw_method=1, weights=weights)
     kde.set_bandwidth(bandwidth / np.sqrt(kde.covariance[0, 0]))
@@ -20,61 +16,46 @@ def kde_pdf(samples, weights, bandwidth):
     result = {"pdf": pdf, "x": x}
     return result
 
-def label_cluster_membership(samples, cluster_type, minima):
+def label_cluster_membership(samples, n_modes, minima):
 
-    if cluster_type == -1:
+    if n_modes == -1:
         result = np.full(samples.shape, -1)
-    elif cluster_type == 1:
-        result = np.full(samples.shape, 2)
+    elif n_modes == 1:
+        result = np.full(samples.shape, 1)
     else:
         result = np.where(samples > minima, 1, 0)
 
     return result
 
-def _is_cluster_type_2(samples, weights, x_min):
+def _is_unimodal_shifted_factor_of_two(samples, weights, bandwidth, x_min):
     mask_bright = samples < x_min
-    mask_baseline = samples > x_min
-    more_bright = sum(mask_bright) > sum(mask_baseline)
-
-    if more_bright:
-        mask_use = mask_bright
-        mask_compare = mask_baseline
-        flux_double = -FLUX_DOUBLE
-    else:
-        mask_use = mask_baseline
-        mask_compare = mask_bright
-        flux_double = FLUX_DOUBLE
-
-    samples_use = samples[mask_use]
-    weights_use = weights[mask_use]
-    samples_compare = samples[mask_compare]
-    weights_compare = weights[mask_compare]
-    weighted_mu = np.average(samples_use, weights=weights_use)
-    weighted_sigma = weighted_std(samples_use, weights_use)
-    errs_compare = np.power(weights_compare, -2)
-    delta = np.abs(weighted_mu - samples_compare)
-    delta_sigma = errs_compare + weighted_sigma
-    delta_significance = delta / delta_sigma
-    above_lower_bound = (weighted_mu + flux_double - 5 * weighted_sigma < samples_compare)
-    below_upper_bound = (samples_compare < weighted_mu + flux_double + 5 * weighted_sigma)
-    within_bounds = (np.logical_and(above_lower_bound, below_upper_bound)).all()
-    significant_difference = (delta_significance >= 5).all()
-    result = within_bounds and significant_difference
-    return result
-
-def _label_cluster_type(samples, weights, kde_result):
-    result = {"type": -1, "min": np.nan}
+    mask_baseline = ~mask_bright
+    samples[mask_bright] -= FLUX_DOUBLE
+    kde_result = kde_pdf(samples, weights, bandwidth)  
     pdf, x = kde_result["pdf"], kde_result["x"]
     maxima = find_peaks(pdf)[0]
     n_maxima = len(maxima)
 
     if n_maxima == 1:
-        result = {"type": 1, "min": np.nan}
+        result = True
+    else:
+        result = False
+
+    samples[mask_bright] += FLUX_DOUBLE
+    return result
+
+def _label_modality(samples, weights, bandwidth):
+    result = {"modes": -1, "min": np.nan}
+    kde_result = kde_pdf(samples, weights, bandwidth)  
+    pdf, x = kde_result["pdf"], kde_result["x"]
+    maxima = find_peaks(pdf)[0]
+    n_maxima = len(maxima)
+
+    if n_maxima == 1:
+        result = {"modes": 1, "min": np.nan}
     elif n_maxima == 2:
         minima = find_peaks(-pdf)[0]
-
-        if _is_cluster_type_2(samples, weights, x[minima[0]]):
-            result = {"type": 2, "min": x[minima[0]]}
+        result = {"modes": 2, "min": x[minima[0]]}
 
     return result
 
@@ -91,41 +72,68 @@ def _cl_apply(df, bandwidth):
     samples = df[df.columns[2]].values
     weights = np.power(df[df.columns[3]].values, -2)
     idxs = df.index
-    kde_result = kde_pdf(samples, weights, bandwidth)
-    cluster_type = _label_cluster_type(samples, weights, kde_result)
-    result = label_cluster_membership(samples, cluster_type["type"], cluster_type["min"])
+    modality_result = _label_modality(samples, weights, bandwidth)
+    result = label_cluster_membership(samples, modality_result["modes"], modality_result["min"])
     return pd.DataFrame(data=result, index=idxs)
 
-def lens_filter(df):
+def lens_filter(df, bandwidth, **kwargs):
     result = False
     cl = df["cluster_label"].values
-    mask_twos = cl == 2
     n_zeros = sum(cl == 0)
     condition1 = ~((cl == -1).any())
     condition2 = n_zeros > 0
 
     if condition1 and condition2:
-        
-        if (cl == 2).any():
-            looks_lensed = [False] * 2
-
-            for i in range(2):
-                df.loc[mask_twos, "cluster_label"] = i
-                looks_lensed[i] = _looks_lensed(df)
-
-            df["cluster_label"] = cl
-            result = any(looks_lensed)
-
-        else:
-            result = _looks_lensed(df)
+        result = _looks_lensed(df, bandwidth, **kwargs)
 
     return result
 
-def _looks_lensed(df):
+def _looks_lensed(df, bandwidth, **kwargs):
+    time_contiguous = kwargs.get("time_contiguous", True)
+    bimodal = kwargs.get("bimodal", True)
+    achromatic = kwargs.get("achromatic", True)
+    factor_of_two = kwargs.get("factor_of_two", True)
+
+    t_bool = True
+    bimodal_bool = True
+    achromatic_bool = True
+    factor_bool = True
+
+    if time_contiguous:
+        t_bool = _check_time_contiguity(df)
+
+    if bimodal:
+        samples = df["delta_mag"].values
+        weights = df["delta_mag_err"].values**-2
+        modality_result = _label_modality(samples, weights, bandwidth)
+        bimodal_bool = modality_result["modes"] == 2
+
+    if achromatic:
+        achromatic_bool = _check_achromaticity(df)
+
+    if factor_of_two:
+        samples = df["delta_mag"].values
+        weights = df["delta_mag_err"].values**-2
+        modality_result = _label_modality(samples, weights, bandwidth)
+
+        if modality_result["modes"] == 2:
+            factor_bool = _is_unimodal_shifted_factor_of_two(samples, 
+                                                             weights, 
+                                                             bandwidth, 
+                                                             modality_result["min"])
+    result = all([t_bool, bimodal_bool, achromatic_bool, factor_bool])
+    return result
+
+def _check_achromaticity(df):
+    mask_bright = df["cluster_label"] == 0
+    result = df.loc[mask_bright, "filter"].unique().size > 1
+    return result
+
+def _check_time_contiguity(df):
     result = False
     n_bright = sum(df["cluster_label"] == 0)
 
-    if n_bright > 1:
+    if n_bright > 0:
         mask_baseline = df["cluster_label"] == 1    
         n_total = len(df)
         idxs = np.arange(n_total)
@@ -187,7 +195,9 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     samples_baseline = df.loc[mask_baseline, mag_column].values
     weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
     baseline = np.average(samples_baseline, weights=weights_baseline)
-    result = df.assign(delta_mag=df[mag_column] - baseline)
+    baseline_err = np.sqrt(1 / weights_baseline.sum())
+    result = df.assign(delta_mag=df[mag_column] - baseline,
+                       delta_mag_err=df[magerr_column] + baseline_err)
     return result
 
 @njit
