@@ -46,27 +46,28 @@ def _is_cluster_type_2(samples, weights, bandwidth, x_min):
         unimodal_shifted = False
 
     samples[mask_bright] += FLUX_DOUBLE
-    more_bright = sum(mask_bright) > sum(mask_baseline)
+#     more_bright = sum(mask_bright) > sum(mask_baseline)
 
-    if more_bright:
-        mask_use = mask_bright
-        mask_compare = mask_baseline
-    else:
-        mask_use = mask_baseline
-        mask_compare = mask_bright
+#     if more_bright:
+#         mask_use = mask_bright
+#         mask_compare = mask_baseline
+#     else:
+#         mask_use = mask_baseline
+#         mask_compare = mask_bright
 
-    samples_use = samples[mask_use]
-    weights_use = weights[mask_use]
-    samples_compare = samples[mask_compare]
-    weights_compare = weights[mask_compare]
-    weighted_mu = np.average(samples_use, weights=weights_use)
-    weighted_sigma = weighted_std(samples_use, weights_use)
-    errs_compare = np.power(weights_compare, -2)
-    delta = np.abs(weighted_mu - samples_compare)
-    delta_sigma = errs_compare + weighted_sigma
-    delta_significance = delta / delta_sigma
-    significant_difference = (delta_significance >= 5).all()
-    result = unimodal_shifted and significant_difference
+#     samples_use = samples[mask_use]
+#     weights_use = weights[mask_use]
+#     samples_compare = samples[mask_compare]
+#     weights_compare = weights[mask_compare]
+#     weighted_mu = np.average(samples_use, weights=weights_use)
+#     weighted_sigma = weighted_std(samples_use, weights_use)
+#     errs_compare = np.power(weights_compare, -2)
+#     delta = np.abs(weighted_mu - samples_compare)
+#     delta_sigma = errs_compare + weighted_sigma
+#     delta_significance = delta / delta_sigma
+#     significant_difference = (delta_significance >= 5).all()
+#     result = unimodal_shifted and significant_difference
+    result = unimodal_shifted
     return result
 
 def _label_cluster_type(samples, weights, bandwidth):
