@@ -21,7 +21,7 @@ def label_cluster_membership(samples, n_modes, minima):
     if n_modes == -1:
         result = np.full(samples.shape, -1)
     elif n_modes == 1:
-        result = np.full(samples.shape, 2)
+        result = np.full(samples.shape, 1)
     else:
         result = np.where(samples > minima, 1, 0)
 
@@ -79,25 +79,12 @@ def _cl_apply(df, bandwidth):
 def lens_filter(df, bandwidth, **kwargs):
     result = False
     cl = df["cluster_label"].values
-    mask_twos = cl == 2
     n_zeros = sum(cl == 0)
     condition1 = ~((cl == -1).any())
     condition2 = n_zeros > 0
 
     if condition1 and condition2:
-        
-        if (cl == 2).any():
-            looks_lensed = [False] * 2
-
-            for i in range(2):
-                df.loc[mask_twos, "cluster_label"] = i
-                looks_lensed[i] = _looks_lensed(df, bandwidth, **kwargs)
-
-            df["cluster_label"] = cl
-            result = any(looks_lensed)
-
-        else:
-            result = _looks_lensed(df, bandwidth, **kwargs)
+        result = _looks_lensed(df, bandwidth, **kwargs)
 
     return result
 
@@ -116,9 +103,8 @@ def _looks_lensed(df, bandwidth, **kwargs):
         t_bool = _check_time_contiguity(df)
 
     if bimodal:
-        bimodal_bool = _check_bimodality(df, bandwidth)
-        samples = df[delta_mag].values
-        weights = df[delta_mag_err].values**-2
+        samples = df["delta_mag"].values
+        weights = df["delta_mag_err"].values**-2
         modality_result = _label_modality(samples, weights, bandwidth)
         bimodal_bool = modality_result["modes"] == 2
 
@@ -126,8 +112,8 @@ def _looks_lensed(df, bandwidth, **kwargs):
         achromatic_bool = _check_achromaticity(df)
 
     if factor_of_two:
-        samples = df[delta_mag].values
-        weights = df[delta_mag_err].values**-2
+        samples = df["delta_mag"].values
+        weights = df["delta_mag_err"].values**-2
         modality_result = _label_modality(samples, weights, bandwidth)
 
         if modality_result["modes"] == 2:
@@ -135,7 +121,6 @@ def _looks_lensed(df, bandwidth, **kwargs):
                                                              weights, 
                                                              bandwidth, 
                                                              modality_result["min"])
-
     result = all([t_bool, bimodal_bool, achromatic_bool, factor_bool])
     return result
 
@@ -148,7 +133,7 @@ def _check_time_contiguity(df):
     result = False
     n_bright = sum(df["cluster_label"] == 0)
 
-    if n_bright > 1:
+    if n_bright > 0:
         mask_baseline = df["cluster_label"] == 1    
         n_total = len(df)
         idxs = np.arange(n_total)
@@ -206,24 +191,11 @@ def subtract_baseline(df, mag_column="mag_auto", magerr_column="magerr_auto"):
     return result
 
 def _subtract_baseline_apply(df, mag_column, magerr_column):
-    print(df["cluster_label"])
-    if (df["cluster_label"] == 1).all():
-        samples = df[mag_column].values
-        weights = df[magerr_column].values
-        baseline = np.average(samples, weights=weights)
-        baseline_err = np.sqrt(1 / weights.sum())
-    elif (df["cluster_label"] == 0).all():
-        samples = df[mag_column].values
-        weights = df[magerr_column].values
-        baseline = np.average(samples, weights=weights) + FLUX_DOUBLE
-        baseline_err = np.sqrt(1 / weights.sum())
-    else:        
-        mask_baseline = df["cluster_label"] == 1
-        samples_baseline = df.loc[mask_baseline, mag_column].values
-        weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
-        baseline = np.average(samples_baseline, weights=weights_baseline)
-        baseline_err = np.sqrt(1 / weights_baseline.sum())
-
+    mask_baseline = df["cluster_label"] == 1
+    samples_baseline = df.loc[mask_baseline, mag_column].values
+    weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
+    baseline = np.average(samples_baseline, weights=weights_baseline)
+    baseline_err = np.sqrt(1 / weights_baseline.sum())
     result = df.assign(delta_mag=df[mag_column] - baseline,
                        delta_mag_err=df[magerr_column] + baseline_err)
     return result
