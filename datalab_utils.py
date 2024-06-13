@@ -62,7 +62,7 @@ def _label_modality(samples, weights, bandwidth):
 def cluster_label_dataframe(df, 
                             mag_column="mag_auto", 
                             magerr_column="magerr_auto", 
-                            bandwidth=0.11):
+                            bandwidth=0.13):
     g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"], sort=False)
     cluster_label = g.apply(_cl_apply, bandwidth)
     result = df.assign(cluster_label=cluster_label)
@@ -76,14 +76,17 @@ def _cl_apply(df, bandwidth):
     result = label_cluster_membership(samples, modality_result["modes"], modality_result["min"])
     return pd.DataFrame(data=result, index=idxs)
 
+def unstable_filter(df):
+    result = ~((df["cluster_label"] == -1).any())
+    return result
+
 def lens_filter(df, bandwidth, **kwargs):
+    min_n_samples = kwargs.get("min_n_samples", 2)
     result = False
     cl = df["cluster_label"].values
     n_zeros = sum(cl == 0)
-    condition1 = ~((cl == -1).any())
-    condition2 = n_zeros > 0
 
-    if condition1 and condition2:
+    if n_zeros >= min_n_samples:
         result = _looks_lensed(df, bandwidth, **kwargs)
 
     return result
@@ -121,6 +124,7 @@ def _looks_lensed(df, bandwidth, **kwargs):
                                                              weights, 
                                                              bandwidth, 
                                                              modality_result["min"])
+
     result = all([t_bool, bimodal_bool, achromatic_bool, factor_bool])
     return result
 
@@ -194,7 +198,10 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     mask_baseline = df["cluster_label"] == 1
     samples_baseline = df.loc[mask_baseline, mag_column].values
     weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
-    baseline = np.average(samples_baseline, weights=weights_baseline)
+    try:
+        baseline = np.average(samples_baseline, weights=weights_baseline)
+    except ZeroDivisionError:
+        print(df["cluster_label"].values)
     baseline_err = np.sqrt(1 / weights_baseline.sum())
     result = df.assign(delta_mag=df[mag_column] - baseline,
                        delta_mag_err=df[magerr_column] + baseline_err)
@@ -224,32 +231,36 @@ def _compute_t_floor(t_this, taus, t_next_other_filter):
     result = np.maximum(t_this + taus, t_next_other_filter)
     return result
 
-def _measure_time_apply(df, taus, column_list):
-    object_id = df.iloc[0, 0]
-    filters = df[column_list[1]].values.astype("U1")
-    mjds = df[column_list[2]].values
-    t_floor = np.zeros(taus.shape)
-    times = np.zeros(taus.shape)
+def measure_time(df, taus, filter_column="filter", mjd_column="mjd"):
+    filters = df[filter_column].values.astype("U1")
+    mjds = df[mjd_column].values
+    result = _measure_total_time(taus, filters, mjds)
+    return result
 
-    for i in range(len(df) - 1):
+@njit
+def _measure_total_time(taus, filters, mjds):
+    t_floor = np.zeros(taus.shape)
+    result = np.zeros(taus.shape)
+
+    for i in range(len(mjds) - 1):
         t_this = mjds[i]
         t_next_other_filter = _find_t_next_other_filter(i, mjds, filters)
 
         if np.isfinite(t_next_other_filter):
-            times += _measure_time(t_this, t_floor, t_next_other_filter, taus)
+            result += _measure_time(t_this, t_floor, t_next_other_filter, taus)
         else:
             break
 
         t_floor = _compute_t_floor(t_this, taus, t_next_other_filter)
 
-    result = pd.DataFrame(data={"lensable_time": times}, index=taus)
-    return result
+    result -= _subtract_time(taus, mjds)
 
-def measure_lensable_time(df, taus, filter_column="filter", mjd_column="mjd"):
-    column_list = ["objectid", filter_column, mjd_column]
-    result = df[column_list].groupby(by="objectid", sort=False).apply(_measure_time_apply, taus, column_list)
+    return result
+@njit
+def _subtract_time(taus, mjds):
+    result = np.maximum(taus - (mjds[-1] - mjds[0]), 0)
     return result
 
 def unimodal_filter(df):
-    result = (df["cluster_label"] == 2).all()
+    result = (df["cluster_label"] == 1).all()
     return result
