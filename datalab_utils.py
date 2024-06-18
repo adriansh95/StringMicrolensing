@@ -16,6 +16,12 @@ def kde_pdf(samples, weights, bandwidth):
     result = {"pdf": pdf, "x": x}
     return result
 
+@njit
+def weighted_std_err(weights):
+    result = np.sqrt(1 / weights.sum())
+    return result
+
+@njit
 def label_cluster_membership(samples, n_modes, minima):
 
     if n_modes == -1:
@@ -80,23 +86,22 @@ def unstable_filter(df):
     result = ~((df["cluster_label"] == -1).any())
     return result
 
-def lens_filter(df, bandwidth, **kwargs):
+def lens_filter(df, **kwargs):
     min_n_samples = kwargs.get("min_n_samples", 2)
     result = False
     cl = df["cluster_label"].values
     n_zeros = sum(cl == 0)
 
     if n_zeros >= min_n_samples:
-        result = _looks_lensed(df, bandwidth, **kwargs)
+        result = _looks_lensed(df, **kwargs)
 
     return result
 
-def _looks_lensed(df, bandwidth, **kwargs):
+def _looks_lensed(df, **kwargs):
     time_contiguous = kwargs.get("time_contiguous", True)
-    bimodal = kwargs.get("bimodal", True)
     achromatic = kwargs.get("achromatic", True)
     factor_of_two = kwargs.get("factor_of_two", True)
-
+    
     t_bool = True
     bimodal_bool = True
     achromatic_bool = True
@@ -105,29 +110,49 @@ def _looks_lensed(df, bandwidth, **kwargs):
     if time_contiguous:
         t_bool = _check_time_contiguity(df)
 
-    if bimodal:
-        samples = df["delta_mag"].values
-        weights = df["delta_mag_err"].values**-2
-        modality_result = _label_modality(samples, weights, bandwidth)
-        bimodal_bool = modality_result["modes"] == 2
-
     if achromatic:
         achromatic_bool = _check_achromaticity(df)
 
     if factor_of_two:
-        samples = df["delta_mag"].values
-        weights = df["delta_mag_err"].values**-2
-        modality_result = _label_modality(samples, weights, bandwidth)
+        factor_bool = _check_factor(df, **kwargs)
 
-        if modality_result["modes"] == 2:
-            factor_bool = _is_unimodal_shifted_factor_of_two(samples, 
-                                                             weights, 
-                                                             bandwidth, 
-                                                             modality_result["min"])
-
-    result = all([t_bool, bimodal_bool, achromatic_bool, factor_bool])
+    result = all([t_bool, achromatic_bool, factor_bool])
     return result
 
+def _check_factor(df, **kwargs):
+    mag_column = kwargs.get("mag_column", "mag_auto")
+    magerr_column = kwargs.get("magerr_column", "magerr_auto")
+    g = df.groupby(by="filter")
+    results = np.full(g.ngroups, False)
+
+    for i, (_, group) in enumerate(g):
+        mask_baseline = group["cluster_label"].values == 1
+
+        if mask_baseline.all():
+            results[i] = True
+        else:
+            samples = group[mag_column].values
+            weights = group[magerr_column].values**-2
+            results[i] = _factor_of_two(samples, weights, mask_baseline)
+
+    result = results.all()
+    return result
+
+@njit
+def _factor_of_two(samples, weights, mask):
+    mu0 = np.average(samples[~mask], weights=weights[~mask])
+    sig0 = weighted_std_err(weights[~mask])
+    mu1 = np.average(samples[mask], weights=weights[mask])
+    sig1 = weighted_std_err(weights[mask])
+    mu_diff = mu1 - mu0
+    sig_diff = sig0 + sig1
+    lower_bound = -FLUX_DOUBLE - 5 * sig_diff
+    upper_bound = -FLUX_DOUBLE + 5 * sig_diff
+    within_bounds = lower_bound < mu_diff < upper_bound
+    five_sigma = mu_diff / sig_diff > 5
+    result = np.logical_and(within_bounds, five_sigma)
+    return result
+        
 def _check_achromaticity(df):
     mask_bright = df["cluster_label"] == 0
     result = df.loc[mask_bright, "filter"].unique().size > 1
