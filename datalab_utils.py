@@ -90,33 +90,28 @@ def lens_filter(df, **kwargs):
     min_n_samples = kwargs.get("min_n_samples", 2)
     result = False
     cl = df["cluster_label"].values
-    n_zeros = sum(cl == 0)
+    cl_bool = cl.astype(bool)
+    n_zeros = cl.size - cl.sum()
 
     if n_zeros >= min_n_samples:
-        result = _looks_lensed(df, **kwargs)
+        result = _looks_lensed(df, cl_bool, **kwargs)
 
     return result
 
-def _looks_lensed(df, **kwargs):
-    time_contiguous = kwargs.get("time_contiguous", True)
+def _looks_lensed(df, cl_bool, **kwargs):
     achromatic = kwargs.get("achromatic", True)
     factor_of_two = kwargs.get("factor_of_two", True)
     
-    t_bool = True
-    bimodal_bool = True
     achromatic_bool = True
     factor_bool = True
 
-    if time_contiguous:
-        t_bool = _check_time_contiguity(df)
-
     if achromatic:
-        achromatic_bool = _check_achromaticity(df)
+        achromatic_bool = _check_achromaticity(df, cl_bool)
 
     if factor_of_two:
         factor_bool = _check_factor(df, **kwargs)
 
-    result = all([t_bool, achromatic_bool, factor_bool])
+    result = all([achromatic_bool, factor_bool])
     return result
 
 def _check_factor(df, **kwargs):
@@ -126,7 +121,7 @@ def _check_factor(df, **kwargs):
     results = np.full(g.ngroups, False)
 
     for i, (_, group) in enumerate(g):
-        mask_baseline = group["cluster_label"].values == 1
+        mask_baseline = group["cluster_label"].values.astype(bool)
 
         if mask_baseline.all():
             results[i] = True
@@ -153,17 +148,17 @@ def _factor_of_two(samples, weights, mask):
     result = np.logical_and(within_bounds, five_sigma)
     return result
         
-def _check_achromaticity(df):
-    mask_bright = df["cluster_label"] == 0
-    result = df.loc[mask_bright, "filter"].unique().size > 1
+def _check_achromaticity(df, cl_bool):
+    result = df.loc[~cl_bool, "filter"].unique().size > 1
     return result
 
 def _check_time_contiguity(df):
     result = False
-    n_bright = sum(df["cluster_label"] == 0)
+    cl = df["cluster_label"]
+    n_bright = len(cl) - cl.sum()
 
     if n_bright > 0:
-        mask_baseline = df["cluster_label"] == 1    
+        mask_baseline = df["cluster_label"].values.astype(bool)    
         n_total = len(df)
         idxs = np.arange(n_total)
         baseline_idxs = idxs[mask_baseline]
@@ -184,34 +179,54 @@ def make_lensing_dataframe(df, time_column="mjd", exp_time_column="exptime"):
     column_list = ["objectid", time_column, exp_time_column, "cluster_label", "filter"]
     df_grouped = df[column_list].groupby(by=["objectid"], sort=False)
     result = df_grouped.apply(_lens_apply)
-    result.reset_index(level=1, inplace=True, drop=True)
+    return result
+
+def _get_bounding_idxs(cluster_label_array):
+    n_total = len(cluster_label_array)
+    idxs = np.arange(n_total)
+    t_start = [i for i in idxs[:-1] if cluster_label_array[i] == 1 and cluster_label_array[i+1] == 0]    
+    t_end = [i+1 for i in idxs[:-1]if cluster_label_array[i] == 0 and cluster_label_array[i+1] == 1]
+
+    if cluster_label_array[0] == 0:
+        t_start = np.concatenate(([-1], t_start))
+    if cluster_label_array[-1] == 0:
+        t_end = np.concatenate((t_end, [n_total]))
+
+    result = np.column_stack([t_start, t_end]).astype(int)
     return result
 
 def _lens_apply(df):
     s_per_day = 86400
-    mask_bright = df["cluster_label"] == 0
-    starts_lensed = mask_bright.iloc[0]
-    ends_lensed = mask_bright.iloc[-1]
-    n_lensed = sum(mask_bright)
-    n_total = len(df)
+    cl_array = df["cluster_label"].values
+    df_indices = df.index
+    n_samples = len(cl_array)
+    bounding_idxs = _get_bounding_idxs(cl_array)
+    t_start_idxs = bounding_idxs[:, 0]
+    t_end_idxs = bounding_idxs[:, 1]
+    t_start_min = df.iloc[t_start_idxs + 1, 1].values
+    t_end_min = (df.iloc[t_end_idxs - 1, 1] + df.iloc[t_end_idxs - 1, 2] / s_per_day).values
 
-    if starts_lensed:
-        t_end_idx = n_lensed
-        t_start = np.nan
-        t_end = df.iat[t_end_idx, 1]
-    elif ends_lensed:
-        t_start_idx = -(n_lensed + 1)
-        t_start = df.iat[t_start_idx, 1] + (df.iat[t_start_idx, 2] / s_per_day)
-        t_end = np.nan
+    if t_start_idxs[0] == -1:
+        t_start0 = -np.inf
+        t_start_max = np.concatenate([[t_start0], (df.iloc[t_start_idxs[1:], 1] + 
+                                              (df.iloc[t_start_idxs[1:], 2] / s_per_day)).values])
     else:
-        idx_range = np.arange(n_total)
-        t_start_idx = idx_range[mask_bright].min() - 1
-        t_end_idx = idx_range[mask_bright].max() + 1
-        t_start = df.iat[t_start_idx, 1] + (df.iat[t_start_idx, 2] / s_per_day)
-        t_end = df.iat[t_end_idx, 1]
+        t_start_max = (df.iloc[t_start_idxs, 1] + 
+                   (df.iloc[t_start_idxs, 2] / s_per_day)).values
 
-    filters = ''.join(df.loc[mask_bright, "filter"])
-    result = pd.DataFrame(data={"t_start": [t_start], "t_end": [t_end], "filters": [filters]})
+    if t_end_idxs[-1] == n_samples:
+        t_end0 = np.inf
+        t_end_max = np.concatenate([df.iloc[t_end_idxs[:-1], 1].values, [t_end0]])
+    else:
+        t_end_max = df.iloc[t_end_idxs, 1].values
+
+    filters = [''.join(df.loc[df_indices[idx_pair[0] + 1: idx_pair[1]], "filter"]) for idx_pair in bounding_idxs]
+    data = {"t_start_max": t_start_max, 
+            "t_end_max": t_end_max, 
+            "t_start_min": t_start_min, 
+            "t_end_min": t_end_min, 
+            "filters": filters}
+    result = pd.DataFrame(data=data)
     return result
 
 def subtract_baseline(df, mag_column="mag_auto", magerr_column="magerr_auto"):
@@ -220,7 +235,7 @@ def subtract_baseline(df, mag_column="mag_auto", magerr_column="magerr_auto"):
     return result
 
 def _subtract_baseline_apply(df, mag_column, magerr_column):
-    mask_baseline = df["cluster_label"] == 1
+    mask_baseline = df["cluster_label"].values.astype(bool)
     samples_baseline = df.loc[mask_baseline, mag_column].values
     weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
     try:
@@ -287,5 +302,5 @@ def _subtract_time(taus, mjds):
     return result
 
 def unimodal_filter(df):
-    result = (df["cluster_label"] == 1).all()
+    result = (df["cluster_label"].values.astype(bool)).all()
     return result
