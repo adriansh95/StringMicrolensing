@@ -33,23 +33,6 @@ def label_cluster_membership(samples, n_modes, minima):
 
     return result
 
-def _is_unimodal_shifted_factor_of_two(samples, weights, bandwidth, x_min):
-    mask_bright = samples < x_min
-    mask_baseline = ~mask_bright
-    samples[mask_bright] -= FLUX_DOUBLE
-    kde_result = kde_pdf(samples, weights, bandwidth)  
-    pdf, x = kde_result["pdf"], kde_result["x"]
-    maxima = find_peaks(pdf)[0]
-    n_maxima = len(maxima)
-
-    if n_maxima == 1:
-        result = True
-    else:
-        result = False
-
-    samples[mask_bright] += FLUX_DOUBLE
-    return result
-
 def _label_modality(samples, weights, bandwidth):
     result = {"modes": -1, "min": np.nan}
     kde_result = kde_pdf(samples, weights, bandwidth)  
@@ -87,58 +70,77 @@ def unstable_filter(df):
     return result
 
 def lens_filter(df, **kwargs):
+    """
+    kwargs and defaults are min_n_samples=2, achromatic=True, 
+    factor_of_two=True, mag_column='mag_auto', magerr_column='magerr_auto',
+    mag_column and magerr_column are passed to _check_factor
+    """
     min_n_samples = kwargs.get("min_n_samples", 2)
-    result = False
+    check_achromatic = kwargs.get("achromatic", True)
+    check_factor_of_two = kwargs.get("factor_of_two", True)
     cl = df["cluster_label"].values
-    cl_bool = cl.astype(bool)
-    n_zeros = cl.size - cl.sum()
-
-    if n_zeros >= min_n_samples:
-        result = _looks_lensed(df, cl_bool, **kwargs)
-
-    return result
-
-def _looks_lensed(df, cl_bool, **kwargs):
-    achromatic = kwargs.get("achromatic", True)
-    factor_of_two = kwargs.get("factor_of_two", True)
+    lensed_idxs = _get_bounding_idxs(cl)
+    n_windows = len(lensed_idxs)
+    df_index = df.index
     
-    achromatic_bool = True
-    factor_bool = True
+    if check_achromatic:
+        achromatic = [_check_achromaticity(df, df_index[idx_pair[0]+1: idx_pair[1]]) for idx_pair in lensed_idxs]
+    else:
+        achromatic = np.full(n_windows, True)
 
-    if achromatic:
-        achromatic_bool = _check_achromaticity(df, cl_bool)
+    if check_factor_of_two:
+        g = df.groupby(by="filter", sort=False)
+        factor_of_two = [_check_factor(df, g, df_index[idx_pair[0]+1: idx_pair[1]], **kwargs) for idx_pair in lensed_idxs]
+    else:
+        factor_of_two = np.full(n_windows, True)
 
-    if factor_of_two:
-        factor_bool = _check_factor(df, **kwargs)
-
-    result = all([achromatic_bool, factor_bool])
+    enough_samples = [idx_pair[1] - idx_pair[0] > min_n_samples for idx_pair in lensed_idxs]
+    
+    result = all(achromatic) & all(factor_of_two) & all(enough_samples)
     return result
 
-def _check_factor(df, **kwargs):
+# def _looks_lensed(df, df_index_slice, cl_bool, **kwargs):
+#     achromatic = kwargs.get("achromatic", True)
+#     factor_of_two = kwargs.get("factor_of_two", True)
+    
+#     achromatic_bool = True
+#     factor_bool = True
+
+#     if achromatic:
+#         achromatic_bool = _check_achromaticity(df, df_index_slice)
+
+#     if factor_of_two:
+#         g = df.groupby(by="filter")
+#         factor_bool = _check_factor(df, g, df_index_slice, cl_bool, **kwargs)
+
+#     result = all([achromatic_bool, factor_bool])
+#     return result
+
+def _check_factor(df, g, df_index_slice, **kwargs):
     mag_column = kwargs.get("mag_column", "mag_auto")
     magerr_column = kwargs.get("magerr_column", "magerr_auto")
-    g = df.groupby(by="filter")
-    results = np.full(g.ngroups, False)
+    filters = df.loc[df_index_slice, "filter"]
+    filters_unique = filters.unique()
+    results = np.full(len(filters), False)
 
-    for i, (_, group) in enumerate(g):
+    for i, f in enumerate(filters_unique):
+        group = g.get_group(f)
         mask_baseline = group["cluster_label"].values.astype(bool)
-
-        if mask_baseline.all():
-            results[i] = True
-        else:
-            samples = group[mag_column].values
-            weights = group[magerr_column].values**-2
-            results[i] = _factor_of_two(samples, weights, mask_baseline)
+        group_idxs = group.index
+        mask_idxs = np.isin(group_idxs, df_index_slice)
+        samples = group[mag_column].values
+        weights = group[magerr_column].values**-2
+        results[i] = _factor_of_two(samples, weights, mask_idxs, mask_baseline)
 
     result = results.all()
     return result
 
 @njit
-def _factor_of_two(samples, weights, mask):
-    mu0 = np.average(samples[~mask], weights=weights[~mask])
-    sig0 = weighted_std_err(weights[~mask])
-    mu1 = np.average(samples[mask], weights=weights[mask])
-    sig1 = weighted_std_err(weights[mask])
+def _factor_of_two(samples, weights, mask_idxs, mask_baseline):
+    mu0 = np.average(samples[mask_idxs], weights=weights[mask_idxs])
+    sig0 = weighted_std_err(weights[mask_idxs])
+    mu1 = np.average(samples[mask_baseline], weights=weights[mask_baseline])
+    sig1 = weighted_std_err(weights[mask_baseline])
     mu_diff = mu1 - mu0
     sig_diff = sig0 + sig1
     lower_bound = -FLUX_DOUBLE - 5 * sig_diff
@@ -148,8 +150,8 @@ def _factor_of_two(samples, weights, mask):
     result = np.logical_and(within_bounds, five_sigma)
     return result
         
-def _check_achromaticity(df, cl_bool):
-    result = df.loc[~cl_bool, "filter"].unique().size > 1
+def _check_achromaticity(df, df_index_slice):
+    result = df.loc[df_index_slice, "filter"].unique().size > 1
     return result
 
 def _check_time_contiguity(df):
@@ -238,10 +240,7 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     mask_baseline = df["cluster_label"].values.astype(bool)
     samples_baseline = df.loc[mask_baseline, mag_column].values
     weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
-    try:
-        baseline = np.average(samples_baseline, weights=weights_baseline)
-    except ZeroDivisionError:
-        print(df["cluster_label"].values)
+    baseline = np.average(samples_baseline, weights=weights_baseline)
     baseline_err = np.sqrt(1 / weights_baseline.sum())
     result = df.assign(delta_mag=df[mag_column] - baseline,
                        delta_mag_err=df[magerr_column] + baseline_err)
