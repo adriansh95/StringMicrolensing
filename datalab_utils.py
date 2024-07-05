@@ -5,6 +5,7 @@ from scipy.signal import find_peaks
 from numba import njit
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
+SECONDS_PER_DAY = 86400
 
 def kde_pdf(samples, weights, bandwidth):
     kde = gaussian_kde(samples, bw_method=1, weights=weights)
@@ -99,23 +100,6 @@ def lens_filter(df, **kwargs):
     result = all(achromatic) & all(factor_of_two) & all(enough_samples)
     return result
 
-# def _looks_lensed(df, df_index_slice, cl_bool, **kwargs):
-#     achromatic = kwargs.get("achromatic", True)
-#     factor_of_two = kwargs.get("factor_of_two", True)
-    
-#     achromatic_bool = True
-#     factor_bool = True
-
-#     if achromatic:
-#         achromatic_bool = _check_achromaticity(df, df_index_slice)
-
-#     if factor_of_two:
-#         g = df.groupby(by="filter")
-#         factor_bool = _check_factor(df, g, df_index_slice, cl_bool, **kwargs)
-
-#     result = all([achromatic_bool, factor_bool])
-#     return result
-
 def _check_factor(df, g, df_index_slice, **kwargs):
     mag_column = kwargs.get("mag_column", "mag_auto")
     magerr_column = kwargs.get("magerr_column", "magerr_auto")
@@ -198,7 +182,7 @@ def _get_bounding_idxs(cluster_label_array):
     return result
 
 def _lens_apply(df):
-    s_per_day = 86400
+    s_per_day = SECONDS_PER_DAY
     cl_array = df["cluster_label"].values
     df_indices = df.index
     n_samples = len(cl_array)
@@ -247,14 +231,14 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     return result
 
 @njit
-def _find_t_next_other_filter(i, mjds, filters):
+def _find_t_next_other_filter(i, exp_ends, filters):
     this_filter = filters[i]
     result = np.inf
 
-    for j in range(i + 1, len(mjds)):
+    for j in range(i + 1, len(exp_ends)):
 
         if filters[j] != this_filter:
-            result = mjds[j]
+            result = exp_ends[j]
             break
 
     return result
@@ -270,20 +254,22 @@ def _compute_t_floor(t_this, taus, t_next_other_filter):
     result = np.maximum(t_this + taus, t_next_other_filter)
     return result
 
-def measure_time(df, taus, filter_column="filter", mjd_column="mjd"):
+def measure_time(df, taus, filter_column="filter", mjd_column="mjd", exptime_column="exptime"):
     filters = df[filter_column].values.astype("U1")
     mjds = df[mjd_column].values
-    result = _measure_total_time(taus, filters, mjds)
+    exp_times = df[exptime_column].values / S_PER_DAY
+    result = _measure_total_time(taus, filters, mjds, exp_times)
     return result
 
 @njit
-def _measure_total_time(taus, filters, mjds):
+def _measure_total_time(taus, filters, mjds, exp_times):
+    exp_ends = mjds + exp_times
     t_floor = np.zeros(taus.shape)
     result = np.zeros(taus.shape)
 
     for i in range(len(mjds) - 1):
         t_this = mjds[i]
-        t_next_other_filter = _find_t_next_other_filter(i, mjds, filters)
+        t_next_other_filter = _find_t_next_other_filter(i, exp_ends, filters)
 
         if np.isfinite(t_next_other_filter):
             result += _measure_time(t_this, t_floor, t_next_other_filter, taus)
@@ -292,12 +278,12 @@ def _measure_total_time(taus, filters, mjds):
 
         t_floor = _compute_t_floor(t_this, taus, t_next_other_filter)
 
-    result -= _subtract_time(taus, mjds)
-
+    result -= _subtract_time(taus, mjds, exp_ends)
     return result
+
 @njit
-def _subtract_time(taus, mjds):
-    result = np.maximum(taus - (mjds[-1] - mjds[0]), 0)
+def _subtract_time(taus, mjds, exp_ends):
+    result = np.maximum(taus - (exp_ends[-1] - mjds[0]), 0)
     return result
 
 def unimodal_filter(df):
