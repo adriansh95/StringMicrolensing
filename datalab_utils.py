@@ -6,6 +6,7 @@ from numba import njit
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
 SECONDS_PER_DAY = 86400
+FILTER_ORDER = {f: i for i, f in enumerate(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])}
 
 def kde_pdf(samples, weights, bandwidth):
     kde = gaussian_kde(samples, bw_method=1, weights=weights)
@@ -53,7 +54,8 @@ def cluster_label_dataframe(df,
                             mag_column="mag_auto", 
                             magerr_column="magerr_auto", 
                             bandwidth=0.13):
-    g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"], sort=False)
+    g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"], sort=False, 
+                                                                      group_keys=False)
     cluster_label = g.apply(_cl_apply, bandwidth)
     result = df.assign(cluster_label=cluster_label)
     return result
@@ -72,6 +74,7 @@ def unstable_filter(df):
 
 def lens_filter(df, **kwargs):
     """
+    df must be sorted by time.
     kwargs and defaults are min_n_samples=2, achromatic=True, 
     factor_of_two=True, mag_column='mag_auto', magerr_column='magerr_auto',
     mag_column and magerr_column are passed to _check_factor
@@ -82,22 +85,26 @@ def lens_filter(df, **kwargs):
     cl = df["cluster_label"].values
     lensed_idxs = _get_bounding_idxs(cl)
     n_windows = len(lensed_idxs)
-    df_index = df.index
-    
-    if check_achromatic:
-        achromatic = [_check_achromaticity(df, df_index[idx_pair[0]+1: idx_pair[1]]) for idx_pair in lensed_idxs]
-    else:
-        achromatic = np.full(n_windows, True)
 
-    if check_factor_of_two:
-        g = df.groupby(by="filter", sort=False)
-        factor_of_two = [_check_factor(df, g, df_index[idx_pair[0]+1: idx_pair[1]], **kwargs) for idx_pair in lensed_idxs]
-    else:
-        factor_of_two = np.full(n_windows, True)
-
-    enough_samples = [idx_pair[1] - idx_pair[0] > min_n_samples for idx_pair in lensed_idxs]
+    if n_windows > 0:
+        df_index = df.index
+        
+        if check_achromatic:
+            achromatic = [_check_achromaticity(df, df_index[idx_pair[0]+1: idx_pair[1]]) for idx_pair in lensed_idxs]
+        else:
+            achromatic = np.full(n_windows, True)
     
-    result = all(achromatic) & all(factor_of_two) & all(enough_samples)
+        if check_factor_of_two:
+            g = df.groupby(by="filter", sort=False)
+            factor_of_two = [_check_factor(df, g, df_index[idx_pair[0]+1: idx_pair[1]], **kwargs) for idx_pair in lensed_idxs]
+        else:
+            factor_of_two = np.full(n_windows, True)
+    
+        enough_samples = [idx_pair[1] - idx_pair[0] > min_n_samples for idx_pair in lensed_idxs]
+        result = all(achromatic) & all(factor_of_two) & all(enough_samples)
+    else:
+        result = False
+
     return result
 
 def _check_factor(df, g, df_index_slice, **kwargs):
@@ -257,7 +264,7 @@ def _compute_t_floor(t_this, taus, t_next_other_filter):
 def measure_time(df, taus, filter_column="filter", mjd_column="mjd", exptime_column="exptime"):
     filters = df[filter_column].values.astype("U1")
     mjds = df[mjd_column].values
-    exp_times = df[exptime_column].values / S_PER_DAY
+    exp_times = df[exptime_column].values / SECONDS_PER_DAY
     result = _measure_total_time(taus, filters, mjds, exp_times)
     return result
 
@@ -288,4 +295,36 @@ def _subtract_time(taus, mjds, exp_ends):
 
 def unimodal_filter(df):
     result = (df["cluster_label"].values.astype(bool)).all()
+    return result
+
+@njit
+def time_lensable(mjds, exp_times, filters, taus):
+    """exp_times assumed to be in same units as mjds (days),
+    filters are cast as type U1"""
+    n_samples = len(mjds)
+    all_filter_counts = np.zeros(7)
+    result = np.zeros(taus.shape)
+
+    for f in filters:
+        all_filter_counts[FILTER_ORDER[f]] += 1
+
+    for i in range(1, n_samples-2):
+        bright_filter_counts = np.zeros(7)
+        bright_filter_counts[FILTER_ORDER[filters[i]]] += 1
+
+        for j in range(i+1, n_samples-1):
+            bright_filter_counts[FILTER_ORDER[filters[j]]] += 1
+            baseline_filter_counts = all_filter_counts - bright_filter_counts
+            baseline_filter_bool = baseline_filter_counts > 0
+            bright_filter_bool = bright_filter_counts > 0
+            enough_filters = bright_filter_bool.sum() > 1
+            bright_and_baseline = bright_filter_bool[bright_filter_bool] == baseline_filter_bool[bright_filter_bool]
+
+            if enough_filters & bright_and_baseline.all():
+                ts = (mjds[i-1] + exp_times[i-1], mjds[i], mjds[j] + exp_times[j], mjds[j+1])
+                tau_min = ts[2] - ts[1]
+                tau_max = ts[3] - ts[0]
+                tau_mask = (tau_min < taus) & (taus < tau_max)
+                result[tau_mask] += t_of_tau(taus[tau_mask], ts)
+
     return result
