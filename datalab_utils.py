@@ -3,16 +3,22 @@ import pandas as pd
 from scipy.stats import gaussian_kde
 from scipy.signal import find_peaks
 from numba import njit
+from collections import defaultdict
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
 SECONDS_PER_DAY = 86400
-FILTER_ORDER = {f: i for i, f in enumerate(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])}
+FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
+FILTER_ORDER = {f: i for i, f in enumerate(FILTERS)}
 
 def _filter_map(char):
     result = FILTER_ORDER[char]
     return result
 
 filter_map = np.vectorize(_filter_map, otypes=[np.int64])
+
+def _mask_to_filter(mask):
+    result = FILTERS[mask]
+    return result
 
 def kde_pdf(samples, weights, bandwidth):
     kde = gaussian_kde(samples, bw_method=1, weights=weights)
@@ -348,9 +354,7 @@ def _delta_t_ends(mjds, t_end_idxs, t_starts, taus):
     return result
 
 @njit
-def _good_window(n_filters_bright, n_filters_baseline):
-    bright_filter_mask = n_filters_bright > 1
-    baseline_filter_mask = n_filters_baseline > 1
+def _good_window(bright_filter_mask, baseline_filter_mask):
     enough_filters = bright_filter_mask.sum(axis=1) > 1
     # In case I choose not to use Numba here,
     #     bright_and_baseline = (~bright_filter_mask | baseline_filter_mask).all(axis=1)
@@ -370,29 +374,38 @@ def _keep_scanning(t_start_idxs, t_end_idxs, n_samples):
     result = (t_start_idxs < n_samples - 3) & (t_end_idxs < n_samples - 1)
     return result
 
-def internal_lensable_time(lc, taus):
-    mjds = lc["mjd"].values
-    filters = lc["filter"].values
-    exp_times = lc["exptime"].values / SECONDS_PER_DAY
-    exposure_ends = mjds + exp_times
-    result = _compute_total_time(mjds, filters, exposure_ends, taus)
+def internal_lensable_time(lc_df, taus):
+    result = defaultdict(lambda: np.zeros(len(taus)))
+
+    for _, lc in lc_df.groupby(by="objectid", sort=False):
+        mjds = lc["mjd"].values
+        filters = lc["filter"].values
+        exp_times = lc["exptime"].values / SECONDS_PER_DAY
+        exposure_ends = mjds + exp_times
+        _internal_lensable_time(mjds, filters, exposure_ends, taus, result)
+
     return result
 
-def _internal_lensable_time(mjds, filters, exposure_ends, taus):
+# @njit
+def _filter_keys_from_mask(mask):
+    result = np.array(["".join(_mask_to_filter(row)) for row in mask])
+    return result
+
+def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict):
     n_filters = len(FILTER_ORDER.keys())
     n_taus = len(taus)
     n_samples = len(mjds)
-    n_filters_all = np.zeros(n_filters)
-    np.add.at(n_filters_all, filter_map(filters), 1)
     tau_idx = np.arange(n_taus)
     mjd_idxs = np.arange(n_samples)
+    n_filters_all = np.zeros(n_filters, dtype=np.int64)
+    np.add.at(n_filters_all, filter_map(filters), 1)
 
     t_start_idxs = np.zeros(n_taus, dtype=np.int8)
     initial_t_start = exposure_ends[t_start_idxs]
     t_end_idxs = np.array([mjd_idxs[mjds < initial_t_start[i] + taus[i]][-1] for i in tau_idx]) #Vectorize?
     t_starts = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)
 
-    n_filters_bright = np.zeros((n_taus, n_filters))
+    n_filters_bright = np.zeros((n_taus, n_filters), dtype=np.int64)
 
     #Can probably Vectorize this but it's not even close to being a bottleneck
     for i in tau_idx:
@@ -400,68 +413,67 @@ def _internal_lensable_time(mjds, filters, exposure_ends, taus):
 
     n_filters_baseline = n_filters_all - n_filters_bright
 
-    result = np.zeros(n_taus)
-
     # Start moving the windows through the lightcurve
     keep_scanning = _keep_scanning(t_start_idxs, t_end_idxs, n_samples)
 
     while keep_scanning.any():
         # Compute time between beginning of t_start and first bright sample
         delta_t_starts = mjds[t_start_idxs + 1] - t_starts
-
         # Find the difference between the end of the bright window and the
-        # start of the first baseline mjd following the bright window
-        # This should ONLY be negative when the window ends after the last
+        # the first baseline sample after the bright window
+        # This is negative if the window ends after the last
         # Sample in the lightcurve
         delta_t_ends = _delta_t_ends(mjds, t_end_idxs, t_starts, taus)
-        good_window = _good_window2(n_filters_bright, n_filters_baseline)
-
-        # There's some amount of time the window can safely move right along
-        # The lightcurve before the start or end encounters another sample
+        # There's some amount of time the window can safely move to the right 
+        # along The lightcurve before the start or end hits another sample
         # This keeps track of whether its the start of the window that hits
         # a sample first, or the end.
         smaller_delta_t_start = delta_t_starts < delta_t_ends
-
-        # This has shape (tau,). Add this "safe" time to result if the window
-        # has not extended past the end of the lightcurve AND the window
-        # has enough bright samples inside and baseline samples outside.
+        # This has shape (tau,). We will add this "safe" time to results_dict
+        # if the window has not extended past the end of the lightcurve 
+        # AND the window has enough bright samples inside 
+        # and baseline samples outside.
         t_add = np.where(smaller_delta_t_start, np.maximum(delta_t_starts, 0), delta_t_ends)
+
+        # Now we check that there's enough baseline and bright samples
+        # in the window
+        bright_filter_mask = n_filters_bright > 0
+        baseline_filter_mask = n_filters_baseline > 0
+        good_window = _good_window(bright_filter_mask, baseline_filter_mask)
+
+        # What filters are in each window (if any)
+        keys = np.array(["".join(_mask_to_filter(row)) for row in bright_filter_mask])
         m = keep_scanning & good_window
-        result[m] += t_add[m]
 
-        # Begin the process of shifting the window past the incoming (outgoing) sample.
-        # Starting by changing the bright and baseline filters counters
-        # get the index of the next filter for each tau. This is t_start_idxs + 1
-        # for taus where delta_t_start is smaller, t_end_idxs + 1 otherwise.
+        for i, k, t in zip(tau_idx[m], keys[m], t_add[m]):
+            results_dict[k][i] += t
+
+        # Begin the process of shifting the window past the incoming (outgoing)
+        # sample by changing the bright and baseline filters counters.
+        # Get the index of the next filter for each tau. 
+        # This is t_start_idxs + 1
+        # if the next sample is outgoing, t_end_idxs + 1 otherwise.
         next_filter_idx = np.where(smaller_delta_t_start, t_start_idxs + 1, t_end_idxs + 1)
-
         # Safely get the "next" filter using these idxs. If the bright window
         # Has extended beyond the end of the lightcurve, this will just get
         # The last filter in the lightcurve and will be masked out.
         next_filter = filters.take(next_filter_idx, mode="clip")
-        next_filter_number = filter_map(next_filter)
-
+        next_filter_number = filter_map(next_filter)[keep_scanning]
         # If the next filter is outgoing (smaller_delta_t_start) subtract from
-        # bright filter count and add to baseline count
-        # What if moving past the exposure time of the incoming (outgoing) sample
-        # moves the window past the start of another sample?
-        next_filter_change = np.where(smaller_delta_t_start, -1, 1)
-        tau_idx_scan = tau_idx[keep_scanning]
-        next_filter_number_scan = next_filter_number[keep_scanning]
-        next_filter_change_scan = next_filter_change[keep_scanning]
-        n_filters_bright[tau_idx_scan, next_filter_number_scan] += next_filter_change_scan
-        n_filters_baseline[tau_idx_scan, next_filter_number_scan] -= next_filter_change_scan
+        # n_filters_bright and add to n_filters_baseline
+        next_filter_change = np.where(smaller_delta_t_start, -1, 1)[keep_scanning]
+        tau_idx_masked = tau_idx[keep_scanning]
+        n_filters_bright[tau_idx_masked, next_filter_number] += next_filter_change
+        n_filters_baseline[tau_idx_masked, next_filter_number] -= next_filter_change
 
         # Keeping track of which samples are inside the lightcurve. Add 1 to t_start_idx
-        # if moving the window past the first bright sample. Add 1 to t_end_idx
-        # if moving the window past the succeeding baseline sample.
+        # if the next sample is outgoing. Add 1 to t_end_idx
+        # if the next sample is incoming.
         start_idx_shift = np.where(smaller_delta_t_start, 1, 0)[keep_scanning]
         t_start_idxs[keep_scanning] += start_idx_shift
         t_end_idxs[keep_scanning] -= start_idx_shift - 1
 
         # Recompute t_starts for the next iteration, 
-        # determine which windows are still within the lightcurve
-        t_starts[keep_scanning] = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)[keep_scanning]
+        t_starts = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)
+        # Determine which windows are still within the lightcurve
         keep_scanning = _keep_scanning(t_start_idxs, t_end_idxs, n_samples)
-
-    return result
