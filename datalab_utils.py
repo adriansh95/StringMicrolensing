@@ -14,10 +14,10 @@ def _filter_map(char):
     result = FILTER_ORDER[char]
     return result
 
-filter_map = np.vectorize(_filter_map, otypes=[np.int64])
+filter_map = np.vectorize(_filter_map, otypes=[np.int32])
 
-def _mask_to_filter(mask):
-    result = FILTERS[mask]
+def _filter_mask_to_str(mask):
+    result = "".join(FILTERS[mask])
     return result
 
 def kde_pdf(samples, weights, bandwidth):
@@ -249,98 +249,9 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
                        delta_mag_err=df[magerr_column] + baseline_err)
     return result
 
-@njit
-def _find_t_next_other_filter(i, exp_ends, filters):
-    this_filter = filters[i]
-    result = np.inf
-
-    for j in range(i + 1, len(exp_ends)):
-
-        if filters[j] != this_filter:
-            result = exp_ends[j]
-            break
-
-    return result
-
-@njit
-def _measure_time(t_this, t_floor, t_next_other_filter, taus):
-    t = np.maximum(t_floor, t_next_other_filter)
-    result = np.maximum(t_this + taus - t, 0)
-    return result
-
-@njit
-def _compute_t_floor(t_this, taus, t_next_other_filter):
-    result = np.maximum(t_this + taus, t_next_other_filter)
-    return result
-
-def measure_time(df, taus, filter_column="filter", mjd_column="mjd", exptime_column="exptime"):
-    filters = df[filter_column].values.astype("U1")
-    mjds = df[mjd_column].values
-    exp_times = df[exptime_column].values / SECONDS_PER_DAY
-    result = _measure_total_time(taus, filters, mjds, exp_times)
-    return result
-
-@njit
-def _measure_total_time(taus, filters, mjds, exp_times):
-    exp_ends = mjds + exp_times
-    t_floor = np.zeros(taus.shape)
-    result = np.zeros(taus.shape)
-
-    for i in range(len(mjds) - 1):
-        t_this = mjds[i]
-        t_next_other_filter = _find_t_next_other_filter(i, exp_ends, filters)
-
-        if np.isfinite(t_next_other_filter):
-            result += _measure_time(t_this, t_floor, t_next_other_filter, taus)
-        else:
-            break
-
-        t_floor = _compute_t_floor(t_this, taus, t_next_other_filter)
-
-    result -= _subtract_time(taus, mjds, exp_ends)
-    return result
-
-@njit
-def _subtract_time(taus, mjds, exp_ends):
-    result = np.maximum(taus - (exp_ends[-1] - mjds[0]), 0)
-    return result
-
 def unimodal_filter(df):
     result = (df["cluster_label"].values.astype(bool)).all()
     return result
-
-@njit
-def time_lensable(mjds, exp_times, filters, taus):
-    """exp_times assumed to be in same units as mjds (days),
-    filters are cast as type U1"""
-    n_samples = len(mjds)
-    all_filter_counts = np.zeros(7)
-    result = np.zeros(taus.shape)
-
-    for f in filters:
-        all_filter_counts[FILTER_ORDER[f]] += 1
-
-    for i in range(1, n_samples-2):
-        bright_filter_counts = np.zeros(7)
-        bright_filter_counts[FILTER_ORDER[filters[i]]] += 1
-
-        for j in range(i+1, n_samples-1):
-            bright_filter_counts[FILTER_ORDER[filters[j]]] += 1
-            baseline_filter_counts = all_filter_counts - bright_filter_counts
-            baseline_filter_bool = baseline_filter_counts > 0
-            bright_filter_bool = bright_filter_counts > 0
-            enough_filters = bright_filter_bool.sum() > 1
-            bright_and_baseline = bright_filter_bool[bright_filter_bool] == baseline_filter_bool[bright_filter_bool]
-
-            if enough_filters & bright_and_baseline.all():
-                ts = (mjds[i-1] + exp_times[i-1], mjds[i], mjds[j] + exp_times[j], mjds[j+1])
-                tau_min = ts[2] - ts[1]
-                tau_max = ts[3] - ts[0]
-                tau_mask = (tau_min < taus) & (taus < tau_max)
-                result[tau_mask] += t_of_tau(taus[tau_mask], ts)
-
-    return result
-
 
 @njit
 def _compute_t_start(exposure_ends, start_idx, end_idxs, taus):
@@ -349,7 +260,7 @@ def _compute_t_start(exposure_ends, start_idx, end_idxs, taus):
     result = np.where(condition, exposure_ends[start_idx], exposure_ends[end_idxs] - taus)
     return result
 
-def _delta_t_ends(mjds, t_end_idxs, t_starts, taus):
+def _delta_t_ends(mjds, t_starts, t_end_idxs, taus):
     result = mjds.take(t_end_idxs + 1, mode="clip") - (t_starts + taus)
     return result
 
@@ -377,35 +288,34 @@ def _keep_scanning(t_start_idxs, t_end_idxs, n_samples):
 def internal_lensable_time(lc_df, taus):
     result = defaultdict(lambda: np.zeros(len(taus)))
 
-    for _, lc in lc_df.groupby(by="objectid", sort=False):
+    for group_name, lc in lc_df.groupby(by="objectid", sort=False):
         mjds = lc["mjd"].values
         filters = lc["filter"].values
         exp_times = lc["exptime"].values / SECONDS_PER_DAY
         exposure_ends = mjds + exp_times
-        _internal_lensable_time(mjds, filters, exposure_ends, taus, result)
+        _internal_lensable_time(mjds, filters, exposure_ends, taus, result, group_name)
 
     return result
 
-# @njit
 def _filter_keys_from_mask(mask):
     result = np.array(["".join(_mask_to_filter(row)) for row in mask])
     return result
 
-def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict):
+def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict, group_name):
     n_filters = len(FILTER_ORDER.keys())
     n_taus = len(taus)
     n_samples = len(mjds)
     tau_idx = np.arange(n_taus)
     mjd_idxs = np.arange(n_samples)
-    n_filters_all = np.zeros(n_filters, dtype=np.int64)
+    n_filters_all = np.zeros(n_filters, dtype=np.int32)
     np.add.at(n_filters_all, filter_map(filters), 1)
 
-    t_start_idxs = np.zeros(n_taus, dtype=np.int8)
+    t_start_idxs = np.zeros(n_taus, dtype=np.int32)
     initial_t_start = exposure_ends[t_start_idxs]
     t_end_idxs = np.array([mjd_idxs[mjds < initial_t_start[i] + taus[i]][-1] for i in tau_idx]) #Vectorize?
     t_starts = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)
 
-    n_filters_bright = np.zeros((n_taus, n_filters), dtype=np.int64)
+    n_filters_bright = np.zeros((n_taus, n_filters), dtype=np.int32)
 
     #Can probably Vectorize this but it's not even close to being a bottleneck
     for i in tau_idx:
@@ -423,7 +333,7 @@ def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict):
         # the first baseline sample after the bright window
         # This is negative if the window ends after the last
         # Sample in the lightcurve
-        delta_t_ends = _delta_t_ends(mjds, t_end_idxs, t_starts, taus)
+        delta_t_ends = _delta_t_ends(mjds, t_starts, t_end_idxs, taus)
         # There's some amount of time the window can safely move to the right 
         # along The lightcurve before the start or end hits another sample
         # This keeps track of whether its the start of the window that hits
@@ -433,7 +343,8 @@ def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict):
         # if the window has not extended past the end of the lightcurve 
         # AND the window has enough bright samples inside 
         # and baseline samples outside.
-        t_add = np.where(smaller_delta_t_start, np.maximum(delta_t_starts, 0), delta_t_ends)
+        t_add = np.maximum(np.where(smaller_delta_t_start, 
+                                    delta_t_starts, delta_t_ends), 0)
 
         # Now we check that there's enough baseline and bright samples
         # in the window
@@ -441,11 +352,14 @@ def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict):
         baseline_filter_mask = n_filters_baseline > 0
         good_window = _good_window(bright_filter_mask, baseline_filter_mask)
 
-        # What filters are in each window (if any)
-        keys = np.array(["".join(_mask_to_filter(row)) for row in bright_filter_mask])
         m = keep_scanning & good_window
+        # assert (t_add[6] == 0 or ~m[6]), (f"""
+        # {t_add[6]}, {group_name}, {t_start_idxs[6]}, {t_end_idxs[6]}, 
+        # {filters[9:11]}, {m[6]}
+        # """)
 
-        for i, k, t in zip(tau_idx[m], keys[m], t_add[m]):
+        for i, t in zip(tau_idx[m], t_add[m]):
+            k = _filter_mask_to_str(bright_filter_mask[i])
             results_dict[k][i] += t
 
         # Begin the process of shifting the window past the incoming (outgoing)
