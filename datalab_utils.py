@@ -66,8 +66,8 @@ def cluster_label_dataframe(df,
                             mag_column="mag_auto", 
                             magerr_column="magerr_auto", 
                             bandwidth=0.13):
-    g = df[["objectid", "filter", mag_column, magerr_column]].groupby(by=["objectid", "filter"], sort=False, 
-                                                                      group_keys=False)
+    l = ["objectid", "filter", mag_column, magerr_column]
+    g = df[l].groupby(by=["objectid", "filter"], sort=False, group_keys=False)
     cluster_label = g.apply(_cl_apply, bandwidth)
     result = df.assign(cluster_label=cluster_label)
     return result
@@ -155,27 +155,6 @@ def _factor_of_two(samples, weights, mask_idxs, mask_baseline):
         
 def _check_achromaticity(df, df_index_slice):
     result = df.loc[df_index_slice, "filter"].unique().size > 1
-    return result
-
-def _check_time_contiguity(df):
-    result = False
-    cl = df["cluster_label"]
-    n_bright = len(cl) - cl.sum()
-
-    if n_bright > 0:
-        mask_baseline = df["cluster_label"].values.astype(bool)    
-        n_total = len(df)
-        idxs = np.arange(n_total)
-        baseline_idxs = idxs[mask_baseline]
-        idx_diffs = np.diff(baseline_idxs)
-        boundary_idxs = np.where(idx_diffs == (n_bright + 1))[0]
-        case1 = len(boundary_idxs) == 1
-        case2 = baseline_idxs[0] == n_bright
-        case3 = (n_total - 1) - baseline_idxs[-1] == n_bright
-
-        if any([case1, case2, case3]):
-            result = True
-
     return result
 
 def make_lensing_dataframe(df, time_column="mjd", exp_time_column="exptime"):
@@ -285,7 +264,7 @@ def _keep_scanning(t_start_idxs, t_end_idxs, n_samples):
     result = (t_start_idxs < n_samples - 3) & (t_end_idxs < n_samples - 1)
     return result
 
-def internal_lensable_time(lc_df, taus):
+def effective_monitoring_time(lc_df, taus):
     result = defaultdict(lambda: np.zeros(len(taus)))
 
     for group_name, lc in lc_df.groupby(by="objectid", sort=False):
@@ -293,15 +272,11 @@ def internal_lensable_time(lc_df, taus):
         filters = lc["filter"].values
         exp_times = lc["exptime"].values / SECONDS_PER_DAY
         exposure_ends = mjds + exp_times
-        _internal_lensable_time(mjds, filters, exposure_ends, taus, result, group_name)
+        _effective_monitoring_time(mjds, filters, exposure_ends, taus, result, group_name)
 
     return result
 
-def _filter_keys_from_mask(mask):
-    result = np.array(["".join(_mask_to_filter(row)) for row in mask])
-    return result
-
-def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict, group_name):
+def _effective_monitoring_time(mjds, filters, exposure_ends, taus, results_dict, group_name):
     n_filters = len(FILTER_ORDER.keys())
     n_taus = len(taus)
     n_samples = len(mjds)
@@ -391,3 +366,4 @@ def _internal_lensable_time(mjds, filters, exposure_ends, taus, results_dict, gr
         t_starts = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)
         # Determine which windows are still within the lightcurve
         keep_scanning = _keep_scanning(t_start_idxs, t_end_idxs, n_samples)
+
