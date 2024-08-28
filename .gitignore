@@ -1,2 +1,5 @@
 tests/.ipynb_checkpoints/*
 tests/__pycache__/*
+utils/.ipynb_checkpoints/
+utils/__pycache__/
+
