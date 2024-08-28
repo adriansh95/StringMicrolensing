@@ -1,12 +1,8 @@
 from collections import defaultdict
-import unittest
 import pandas as pd
 import numpy as np
-import os
 from numpy.testing import assert_array_equal
-from unittest.mock import patch
-
-os.environ["DISABLE_NUMBA"] = "True"
+from utils.effective_monitoring_time import effective_monitoring_time
 
 class TestMakeLensingDataframe(unittest.TestCase):
     @classmethod
@@ -18,15 +14,14 @@ class TestMakeLensingDataframe(unittest.TestCase):
                       "exptime": np.ones(20) * 0.01 * 86400,
                       "cluster_label": cl,
                       "filter": f}
-        cls.input_dataframe = pd.DataFrame(data=input_data)
+        self.input_dataframe = pd.DataFrame(data=input_data)
 
-    def test_make_lensing_dataframe(self):
+    def test_effective_monitoring_time(self):
+        input_dataframe = pd.DataFrame(data=input_data)
         input_taus = np.array([0.001, 10, 21])
         expected_result = dict()
         expected_result["griz"] = np.array([0.  , 8.91, 0.  ])
-        with patch("numba.njit", lambda x: x):
-            from utils.effective_monitoring_time import effective_monitoring_time
-        result = dict(effective_monitoring_time(self.input_dataframe, input_taus))
+        result = dict(effective_monitoring_time(input_dataframe, input_taus))
         assert_array_equal(expected_result["griz"].round(5), result["griz"].round(5))
 
 if __name__ == "main":

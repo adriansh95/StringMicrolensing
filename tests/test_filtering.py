@@ -1,8 +1,8 @@
 import unittest
-import pandas as pd
 import numpy as np
+import pandas as pd
+from numpy.testing import assert_array_equal
 from utils.filtering import unstable_filter
-from pandas.testing import assert_frame_equal
 
 class TestMakeLensingDataframe(unittest.TestCase):
     @classmethod
@@ -13,14 +13,16 @@ class TestMakeLensingDataframe(unittest.TestCase):
                       "mjd": np.arange(20),
                       "exptime": np.ones(20) * 0.01 * 86400,
                       "cluster_label": cl,
-                      "filter": f}
+                      "filter": f,
+                      "mag_auto": np.ones(20),
+                      "magerr_auto": np.ones(20) * 0.05}
         cls.input_dataframe = pd.DataFrame(data=input_data)
 
     def test_unstable_filter1(self):
         input_dataframe = self.input_dataframe
         expected_output = False
         result = unstable_filter(input_dataframe)
-        assert_frame_equal(result, expected_output)
+        assert_array_equal(result, expected_output)
 
 if __name__ == "main":
     unittest.main()

@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from utils.analyze_lensing import make_lensing_dataframe
+from utils.filtering import unstable_filter
 from pandas.testing import assert_frame_equal
 
 class TestMakeLensingDataframe(unittest.TestCase):
@@ -16,17 +16,10 @@ class TestMakeLensingDataframe(unittest.TestCase):
                       "filter": f}
         cls.input_dataframe = pd.DataFrame(data=input_data)
 
-    def test_make_lensing_dataframe(self):
+    def test_unstable_filter1(self):
         input_dataframe = self.input_dataframe
-        input_dataframe.loc[4:7, "cluster_label"] = 0
-        expected_output_data = {"t_start_max": [3.01],
-                                "t_end_max": [8],
-                                "t_start_min": [4],
-                                "t_end_min": [7.01],
-                                "filters": ["rgiz"]}
-        idx = pd.MultiIndex.from_tuples([("000", 0)], names=("objectid", None))
-        expected_output = pd.DataFrame(data=expected_output_data, index=idx)
-        result = make_lensing_dataframe(input_dataframe)
+        expected_output = False
+        result = unstable_filter(input_dataframe)
         assert_frame_equal(result, expected_output)
 
 if __name__ == "main":

@@ -3,6 +3,7 @@ This module provides the effective_monitoring_time function and its helpers.
 """
 from collections import defaultdict
 import numpy as np
+import os
 from numba import njit
 
 FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
