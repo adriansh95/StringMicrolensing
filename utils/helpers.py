@@ -24,3 +24,17 @@ def get_bounding_idxs(cluster_label_array):
 
     result = np.column_stack([t_start, t_end]).astype(int)
     return result
+
+def subtract_baseline(df_grouped, mag_column="mag_auto", magerr_column="magerr_auto"):
+    result = df_grouped.apply(_subtract_baseline_apply, mag_column, magerr_column)
+    return result
+
+def _subtract_baseline_apply(df, mag_column, magerr_column):
+    mask_baseline = df["cluster_label"].values.astype(bool)
+    samples_baseline = df.loc[mask_baseline, mag_column].values
+    weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
+    baseline = np.average(samples_baseline, weights=weights_baseline)
+    baseline_err = np.sqrt(1 / weights_baseline.sum())
+    result = df.assign(delta_mag=df[mag_column] - baseline,
+                       delta_mag_err=df[magerr_column] + baseline_err)
+    return result
