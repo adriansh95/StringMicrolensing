@@ -1,6 +1,5 @@
 """
-This module provides the make_lensing_dataframe, which is intended for use
-after lightcurves have been KDE labeled and filtered. 
+This module provides functions for analyzing candidate lensing events.
 """
 import numpy as np
 import pandas as pd
@@ -96,4 +95,21 @@ def integrated_event_duration_posterior(taus, ts):
         result[:-1] = integral[mask[:-1]]
         result /= result.sum()
 
+    return result
+
+def count_events_per_source(df):
+    """This function works on the dataframe resulting from make_lensing_dataframe.
+    It groups by objectid (level 0), and counts the number of rows within each group
+    by selecting the 'filters' column and calling the 'count' aggregator supplied by
+    pandas."""
+    result = df.groupby(level=0).filters.agg("count")
+    result.name = "n_events"
+    return result
+
+def count_filter_seq(df):
+    """This function works on the dataframe resulting from make_lensing_dataframe.
+    It takes unique filter keys for the bright sequence, sorts them so duplicate sequences
+    like 'gri' and 'gir' are counted correctly, and counts the number of each sequence."""
+    filters_in_event = df["filters"].apply(lambda x: "".join(sorted(set(x))))
+    result = filters_in_event.value_counts()
     return result
