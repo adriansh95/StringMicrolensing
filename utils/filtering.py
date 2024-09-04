@@ -100,3 +100,16 @@ def unimodal_filter(df):
     """Returns true if all(df["cluster_label"] == 1) otherwise returns false."""
     result = (df["cluster_label"].values.astype(bool)).all()
     return result
+
+def lightcurve_classifier(lc, **params):
+
+    if ~unstable_filter(lc):
+        result = "unstable"
+    elif lens_filter(lc, **params):
+        result = "background"
+    elif unimodal_filter(lc):
+        result = "unimodal"
+    else:
+        result = np.nan
+
+    return result
