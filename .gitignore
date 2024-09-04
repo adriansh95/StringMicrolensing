@@ -7,3 +7,4 @@ __pycache__/
 plots/*.png
 plots/*/*.png
 plots/*/*/*.png
+results/*/*.parquet
