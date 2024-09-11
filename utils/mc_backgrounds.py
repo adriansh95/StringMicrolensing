@@ -1,5 +1,6 @@
 """This module provides the functions used in monte_carlo_lensing_nsc.ipynb"""
 import numpy as np
+import pandas as pd
 import logging
 
 def synthesize_background(lightcurves, rates, taus, rng):
@@ -30,8 +31,9 @@ def _synthesize_background(df, rates, taus, rng):
         for st in start_times:
             lower_bound = st
             upper_bound = st + tau
-            start_idx = df["mjd"].searchsorted(lower_bound, side="left")
+            start_idx = df["mjd"].searchsorted(lower_bound, side="right")
             stop_idx = df["mjd"].searchsorted(upper_bound, side="right")
             result.iloc[start_idx:stop_idx] += (-2.5 * np.log10(2))
 
+    result = pd.DataFrame(result)
     return result
