@@ -14,9 +14,9 @@ def plot_lightcurve(lightcurve_df, ax, **kwargs):
     for f, c in zip(filters, colors):
         m_f = lightcurve_df[filter_column] == f
         lc = lightcurve_df.loc[m_f]
-        xerr = np.vstack((np.zeros(len(lc)), lc[xerr_column] / 86400))
+        xerr = (lc[xerr_column] / 86400) / 2
 
-        ax.errorbar(lc[x_column], lc[y_column], xerr=xerr,
+        ax.errorbar(lc[x_column] + xerr, lc[y_column], xerr=xerr,
                     yerr=lc[yerr_column], marker='.', ms=8,
                     capsize=5, color=c, ls="None", label=f)
 
