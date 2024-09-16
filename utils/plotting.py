@@ -20,7 +20,6 @@ def plot_lightcurve(lightcurve_df, ax, **kwargs):
                     yerr=lc[yerr_column], marker='.', ms=8,
                     capsize=5, color=c, ls="None", label=f)
 
-    ax.set_ylabel('Mag', fontsize=20)
     ax.tick_params(labelsize=18)
     ax.invert_yaxis()
     ax.grid(visible=True)
@@ -31,7 +30,7 @@ def plot_event(event_df, lightcurve_df, fig=None, **kwargs):
     objectid = lightcurve_df[id_column].iloc[0]
 
     if fig is None:
-        fig, axes = plt.subplots(1, 1, figsize=(18, 9))
+        fig, axes = plt.subplots(2, 1, figsize=(18, 9))
     else:
         axes = fig.get_axes()
 
