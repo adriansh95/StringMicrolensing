@@ -158,13 +158,53 @@ def _effective_monitoring_time(mjds, filters, exposure_ends, taus, results_dict)
         # Determine which windows are still within the lightcurve
         keep_scanning = _keep_scanning(t_start_idxs, t_end_idxs, n_samples)
 
-class lightcurve_scanner():
+class _FilterState():
+    def __init__(self, taus):
+        n_filters_all = np.zeros(7, dtype=np.int32)
+        self.n_filters_bright = np.zeros((len(taus), 7), dtype=np.int32)
+        self.keep_scanning = np.full(len(taus), False)
+
+class _TimeState():
+    def __init__(self, taus):
+        self.t_start_idx = np.zeros(len(taus), dtype=np.int32)
+        self.t_start = np.zeros(len(taus))
+        self.t_end_idx = np.zeros(len(taus), dtype=np.int32)
+
+class _LcScannerState():
+    def __init__(self, taus):
+        self.time = _TimeState(taus)
+        self.filter = _FilterState(taus)
+
+class LcScanner():
     FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
     FILTER_ORDER = {'u': 0, 'g': 1, 'r': 2, 'i': 3, 'z': 4, 'Y': 5, 'VR': 6}
-    n_filters_all = np.zeros(7, dtype=np.int32)
 
     def __init__(self, taus):
         self.taus = taus
-        self.t_start_idx = np.zeros(len(taus), dtype=np.int32)
-        self.t_end_idx = np.zeros(len(taus), dtype=np.int32)
-        self.n_filters_bright = np.zeros((len(taus), 7), dtype=np.int32)
+        self.state = _LcScannerState(taus)
+
+    @classmethod
+    def _filter_map(cls, char):
+        result = cls.FILTER_ORDER[char]
+        return result
+
+    @classmethod
+    def filter_map(cls, char):
+        foo = np.vectorize(cls._filter_map)
+        result = foo(char)
+        return result
+
+    def record_windows(self, dataframe):
+        mjds = dataframe["mjd"].values
+        filters = dataframe["filter"].values
+        exposure_ends = (dataframe["mjd"] + 
+                         (dataframe["exptime"] / 86400)).values
+
+    def _record_windows(self, mjds, filters, exposure_ends):
+        self._setup_state(mjds, filters, exposure_ends):
+
+    def setup_state(self, mjds, filters, exposure_ends):
+        np.add.at(self.state.filter.n_filters_all,
+                  self.filter_map(filters),
+                  1)
+        initial_t_start = exposure_ends[self.state.time.t_start_idxs]
