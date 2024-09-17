@@ -78,13 +78,11 @@ def _effective_monitoring_time(mjds, filters, exposure_ends, taus, results_dict)
     mjd_idxs = np.arange(n_samples)
     n_filters_all = np.zeros(n_filters, dtype=np.int32)
     np.add.at(n_filters_all, filter_map(filters), 1)
-
     t_start_idxs = np.zeros(n_taus, dtype=np.int32)
     initial_t_start = exposure_ends[t_start_idxs]
     t_end_idxs = np.array([mjd_idxs[mjds < initial_t_start[i] + taus[i]][-1]
                            for i in tau_idx]) #Vectorize?
     t_starts = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)
-
     n_filters_bright = np.zeros((n_taus, n_filters), dtype=np.int32)
 
     #Can probably Vectorize this but it's not even close to being a bottleneck
@@ -159,3 +157,14 @@ def _effective_monitoring_time(mjds, filters, exposure_ends, taus, results_dict)
         t_starts = _compute_t_start(exposure_ends, t_start_idxs, t_end_idxs, taus)
         # Determine which windows are still within the lightcurve
         keep_scanning = _keep_scanning(t_start_idxs, t_end_idxs, n_samples)
+
+class lightcurve_scanner():
+    FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
+    FILTER_ORDER = {'u': 0, 'g': 1, 'r': 2, 'i': 3, 'z': 4, 'Y': 5, 'VR': 6}
+    n_filters_all = np.zeros(7, dtype=np.int32)
+
+    def __init__(self, taus):
+        self.taus = taus
+        self.t_start_idx = np.zeros(len(taus), dtype=np.int32)
+        self.t_end_idx = np.zeros(len(taus), dtype=np.int32)
+        self.n_filters_bright = np.zeros((len(taus), 7), dtype=np.int32)
