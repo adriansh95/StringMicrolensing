@@ -159,29 +159,59 @@ def _effective_monitoring_time(mjds, filters, exposure_ends, taus, results_dict)
         keep_scanning = _keep_scanning(t_start_idxs, t_end_idxs, n_samples)
 
 class _FilterState():
-    def __init__(self, taus):
-        n_filters_all = np.zeros(7, dtype=np.int32)
-        self.n_filters_bright = np.zeros((len(taus), 7), dtype=np.int32)
-        self.keep_scanning = np.full(len(taus), False)
+    def __init__(self, n_taus):
+        self.n_all = np.zeros(7, dtype=np.int32)
+        self.n_bright = np.zeros((n_taus, 7), dtype=np.int32)
+        self.n_baseline = np.zeros(self.n_bright.shape,
+                                   dtype=np.int32)
 
 class _TimeState():
-    def __init__(self, taus):
-        self.t_start_idx = np.zeros(len(taus), dtype=np.int32)
-        self.t_start = np.zeros(len(taus))
-        self.t_end_idx = np.zeros(len(taus), dtype=np.int32)
+    def __init__(self, n_taus):
+        self.n_taus = n_taus
+        self.t_start_idx = np.zeros(n_taus, dtype=np.int32)
+        self.t_start = np.zeros(n_taus)
+        self.t_end_idx = np.zeros(n_taus, dtype=np.int32)
+
+    def update(self, t_start, t_start_idx, t_end_idx): # needs more args?
+        self.t_start = t_start
+        self.t_start_idx = t_start_idx
+        self.t_end_idx = t_end_idx
+        self.keep_scanning = self._keep_scanning()
 
 class _LcScannerState():
-    def __init__(self, taus):
-        self.time = _TimeState(taus)
-        self.filter = _FilterState(taus)
+    def __init__(self, n_taus):
+        self.time = _TimeState(n_taus)
+        self.filter = _FilterState(n_taus)
 
 class LcScanner():
     FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
     FILTER_ORDER = {'u': 0, 'g': 1, 'r': 2, 'i': 3, 'z': 4, 'Y': 5, 'VR': 6}
 
     def __init__(self, taus):
+        n_taus = len(taus)
         self.taus = taus
-        self.state = _LcScannerState(taus)
+        self.n_samples = 0
+        self.tau_idx = np.arange(n_taus)
+        self.keep_scanning = np.full(n_taus, False)
+        self.state = _LcScannerState(n_taus)
+
+    @njit
+    def _keep_scanning(self):
+        t_start_idx = self.state.time.t_start_idx
+        t_end_idx = self.state.time.t_end_idx
+        n_samples = self.n_samples
+        # This function returns a boolean array, true when the last
+        # bright sample in the window is not the last sample in the LC
+        # AND when the first bright sample is not the penultimate sample
+        # in the LC (cannot place an upper bound on the window)
+        result = ((t_start_idx < n_samples - 3)
+                  & (t_end_idx < n_samples - 1))
+        return result
+
+    def update(self): # needs args
+        self.state.time.update() # needs args
+        self.state.filter.update() # needs args
+        self.keep_scanning = self._keep_scanning()
 
     @classmethod
     def _filter_map(cls, char):
@@ -199,12 +229,58 @@ class LcScanner():
         filters = dataframe["filter"].values
         exposure_ends = (dataframe["mjd"] + 
                          (dataframe["exptime"] / 86400)).values
+        result = self._record_windows(mjds, filters, exposure_ends)
+        return result
 
     def _record_windows(self, mjds, filters, exposure_ends):
-        self._setup_state(mjds, filters, exposure_ends):
+        result = np.full((len(self.taus), len(mjds) * 2)), np.nan)
+        self._setup(mjds, filters, exposure_ends):
 
-    def setup_state(self, mjds, filters, exposure_ends):
-        np.add.at(self.state.filter.n_filters_all,
+        while self.keep_scanning.any():
+
+
+    def _setup(self, mjds, filters, exposure_ends):
+        self.setup_time_state(mjds, exposure_ends)
+        self.setup_filter_state(filters)
+        self.keep_scanning = self._keep_scanning()
+
+    def setup_time_state(self, mjds, exposure_ends):
+        t_start_idx = self.state.time.t_start_idx
+        initial_t_start = exposure_ends[t_start_idx]
+        t_end_idx = [mjd_idx[mjds < initial_t_start[i] + taus[i]][-1]
+                     for i in self.tau_idx]
+        t_end_idx = np.array(t_end_idx)
+        new_t_start = self._compute_t_start(exposure_ends)
+        self.state.time.n_samples = len(mjds)
+        self.state.time.update(new_t_start, initial_t_start, t_end_idx)
+
+    def setup_filter_state(self, filters):
+        np.add.at(self.state.filter.n_all,
                   self.filter_map(filters),
                   1)
-        initial_t_start = exposure_ends[self.state.time.t_start_idxs]
+        t_end_idx = self.state.time.t_end_idx
+
+        #Can probably Vectorize this but it's not even close to being a bottleneck
+        for i in self.tau_idx:
+            np.add.at(self.state.filter.n_bright[i],
+                      self.filter_map(filters[1: t_end_idx[i] + 1]),
+                      1)
+
+        self.state.filter.n_baseline = (self.state.filter.n_all
+                                        - self.state.filter.n_bright)
+
+
+    @njit
+    def _compute_t_start(self, exposure_ends):
+        """This gives the earlist time after 
+        mjds[start_idx] + exp_times[start_idx]"""
+        start_idx = self.state.time.start_idx
+        end_idx = self.state.time.end_idxs
+        taus = self.taus
+        condition = (exposure_ends[start_idx] >
+                     ((exposure_ends[end_idxs]
+                       - taus)))
+        result = np.where(condition,
+                          exposure_ends[start_idx],
+                          exposure_ends[end_idxs] - taus)
+        return result
