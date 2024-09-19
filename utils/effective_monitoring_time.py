@@ -162,56 +162,48 @@ class _FilterState():
     def __init__(self, n_taus):
         self.n_all = np.zeros(7, dtype=np.int32)
         self.n_bright = np.zeros((n_taus, 7), dtype=np.int32)
-        self.n_baseline = np.zeros(self.n_bright.shape,
-                                   dtype=np.int32)
+        self.n_baseline = np.zeros((n_taus, 7), dtype=np.int32)
+
+    def update(self, n_bright):
+        self.n_bright = n_bright
+        self.n_baseline = self.n_all - n_bright
 
 class _TimeState():
     def __init__(self, n_taus):
-        self.n_taus = n_taus
-        self.t_start_idx = np.zeros(n_taus, dtype=np.int32)
         self.t_start = np.zeros(n_taus)
-        self.t_end_idx = np.zeros(n_taus, dtype=np.int32)
+        self.start_idx = np.zeros(n_taus, dtype=np.int32)
+        self.end_idx = np.zeros(n_taus, dtype=np.int32)
 
-    def update(self, t_start, t_start_idx, t_end_idx): # needs more args?
+    def update(self, t_start, start_idx, end_idx): # needs more args?
         self.t_start = t_start
-        self.t_start_idx = t_start_idx
-        self.t_end_idx = t_end_idx
-        self.keep_scanning = self._keep_scanning()
+        self.start_idx = start_idx
+        self.end_idx = end_idx
 
 class _LcScannerState():
     def __init__(self, n_taus):
         self.time = _TimeState(n_taus)
         self.filter = _FilterState(n_taus)
+        self.last_window_good = np.full(n_taus, False)
+        self.this_window_good = np.full(n_taus, False)
 
 class LcScanner():
     FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
     FILTER_ORDER = {'u': 0, 'g': 1, 'r': 2, 'i': 3, 'z': 4, 'Y': 5, 'VR': 6}
 
-    def __init__(self, taus):
+    def __init__(self, taus, n_filters_req=2):
         n_taus = len(taus)
+        self.n_taus = n_taus
         self.taus = taus
         self.n_samples = 0
+        self.n_filters_req = n_filters_req
         self.tau_idx = np.arange(n_taus)
-        self.keep_scanning = np.full(n_taus, False)
         self.state = _LcScannerState(n_taus)
 
-    @njit
-    def _keep_scanning(self):
-        t_start_idx = self.state.time.t_start_idx
-        t_end_idx = self.state.time.t_end_idx
-        n_samples = self.n_samples
-        # This function returns a boolean array, true when the last
-        # bright sample in the window is not the last sample in the LC
-        # AND when the first bright sample is not the penultimate sample
-        # in the LC (cannot place an upper bound on the window)
-        result = ((t_start_idx < n_samples - 3)
-                  & (t_end_idx < n_samples - 1))
-        return result
-
-    def update(self): # needs args
-        self.state.time.update() # needs args
-        self.state.filter.update() # needs args
-        self.keep_scanning = self._keep_scanning()
+    def update(self, t_start, start_idx, end_idx, n_bright):
+        self.state.time.update(t_start, start_idx, end_idx)
+        self.state.filter.update(n_bright)
+        self.state.last_window_good = self.state.this_window_good
+        self.state.this_window_good = self._good_window()
 
     @classmethod
     def _filter_map(cls, char):
@@ -233,54 +225,105 @@ class LcScanner():
         return result
 
     def _record_windows(self, mjds, filters, exposure_ends):
-        result = np.full((len(self.taus), len(mjds) * 2)), np.nan)
-        self._setup(mjds, filters, exposure_ends):
+        self._setup(mjds, filters):
+        result = np.full((self.n_samples * 2, self.n_taus)), np.nan)
 
-        while self.keep_scanning.any():
+        # Shift, scan, record, repeat
+        for i in range(self.n_samples):
+            # Compute time between beginning of t_start and first bright sample
+            delta_t_start = (mjds[self.state.time.start_idx] - 
+                              self.state.time.t_start)
+            # Find the difference between the end of the bright window and the
+            # the first baseline sample after the bright window
+            delta_t_end = self._delta_t_end(mjds)
+            # There's some amount of time the window can safely move to the right
+            # along The lightcurve before the start or end hits another sample
+            # This keeps track of whether its the start of the window that hits
+            # a sample first, or the end.
+            smaller_delta_t_start = delta_t_start < delta_t_end
+            # Add 1 to start_idx
+            # if the next sample is outgoing. Add 1 to end_idx
+            # if the next sample is incoming.
+            t_idx_shift = np.where(smaller_delta_t_start, 1, 0)
+            # Change the bright and baseline filters counters.
+            # Get the index of the next filter for each tau.
+            # This is start_idx
+            # if the next sample is outgoing, end_idx otherwise.
+            # If the bright window
+            # Has extended beyond the end of the lightcurve, delta_t_end is 
+            # np.inf, so smaller_delta_t_start will return start_idx
+            next_filter_idx = np.where(smaller_delta_t_start,
+                                       self.state.time.start_idx,
+                                       self.state.time.end_idx)
+            # Get the next filter using these idxs. 
+            next_filter = filters[next_filter_idx]
+            next_filter_number = self.__class__.filter_map(next_filter)
+            # If the next filter is outgoing (smaller_delta_t_start) subtract from
+            # n_filters_bright and add to n_filters_baseline
+            filter_shift = np.where(smaller_delta_t_start, -1, 1)
+            self._shift_window(exposure_ends, start_idx_shift, filter_shift, filter_number)
+            result[i] = self._record_t_start()
 
+    def _record_t_start(self):
+        window_changed = (self.state.last_window_good & ~self.state.this_window_good)
+        result = np.where(window_changed, self.state.time.t_start, np.nan)
+        return result
 
-    def _setup(self, mjds, filters, exposure_ends):
-        self.setup_time_state(mjds, exposure_ends)
-        self.setup_filter_state(filters)
-        self.keep_scanning = self._keep_scanning()
-
-    def setup_time_state(self, mjds, exposure_ends):
-        t_start_idx = self.state.time.t_start_idx
-        initial_t_start = exposure_ends[t_start_idx]
-        t_end_idx = [mjd_idx[mjds < initial_t_start[i] + taus[i]][-1]
-                     for i in self.tau_idx]
-        t_end_idx = np.array(t_end_idx)
+    def _shift_window(self, exposure_ends, t_shift, filter_shift, filter_number)
+        new_start_idx = self.state.time.start_idx + t_shift
+        new_end_idx = self.state.time.end_idx - (t_shift - 1)
         new_t_start = self._compute_t_start(exposure_ends)
-        self.state.time.n_samples = len(mjds)
-        self.state.time.update(new_t_start, initial_t_start, t_end_idx)
+        new_n_bright = self.state.filter.n_bright
+        new_n_bright[:, filter_number] += filter_shift
+        self.update(new_start_idx, new_end_idx, new_n_bright)
+            
+    def _setup(self, mjds, filters):
+        self._setup_time_state(mjds)
+        self._setup_filter_state(filters)
 
-    def setup_filter_state(self, filters):
+    def _setup_time_state(self, mjds):
+        start_idx = self.state.time.start_idx
+        end_idx = self.state.time.end_idx
+        initial_t_start = mjds[0] - self.taus
+        self.n_samples = len(mjds)
+        self.state.time.update(initial_t_start, start_idx, end_idx)
+
+    def _setup_filter_state(self, filters):
         np.add.at(self.state.filter.n_all,
                   self.filter_map(filters),
                   1)
-        t_end_idx = self.state.time.t_end_idx
-
-        #Can probably Vectorize this but it's not even close to being a bottleneck
-        for i in self.tau_idx:
-            np.add.at(self.state.filter.n_bright[i],
-                      self.filter_map(filters[1: t_end_idx[i] + 1]),
-                      1)
-
         self.state.filter.n_baseline = (self.state.filter.n_all
                                         - self.state.filter.n_bright)
 
+    def _compute_t_start(self, exposure_ends): # Does this work with setup?
+        """This gives the earlist time after 
+        mjds[start_idx - 1] + exp_times[start_idx - 1]"""
+        start0 = exposure_ends.take(self.state.time.start_idx - 1,
+                                    mode="clip")
+        start1 = (exposure_ends.take(self.state.time.end_idx - 1,
+                                     mode="clip")  - self.taus)
+        condition = (start0 > start1)
+        result = np.where(condition, start0, start1)
+        return result
+
+    def _delta_t_end(self, mjds):
+        dt_end = (mjds.take(self.state.time.end_idx, mode="clip")
+                  - (self.state.time.t_start + self.taus))
+        result = np.where(dt_end >= 0, dt_end, np.inf)
+        return result
 
     @njit
-    def _compute_t_start(self, exposure_ends):
-        """This gives the earlist time after 
-        mjds[start_idx] + exp_times[start_idx]"""
-        start_idx = self.state.time.start_idx
-        end_idx = self.state.time.end_idxs
-        taus = self.taus
-        condition = (exposure_ends[start_idx] >
-                     ((exposure_ends[end_idxs]
-                       - taus)))
-        result = np.where(condition,
-                          exposure_ends[start_idx],
-                          exposure_ends[end_idxs] - taus)
+    def _good_window(self):
+        bright_filter_mask = self.state.filters.n_bright > 0
+        baseline_filter_mask = self.state.filters.n_baseline > 0
+        enough_filters = (bright_filter_mask.sum(axis=1) > 
+                          (self.n_filters_req - 1))
+        # In case I choose not to use Numba here,
+        #     bright_and_baseline = (~bright_filter_mask | baseline_filter_mask).all(axis=1)
+        # is equivalent but quite a bit slower.
+        m = ~bright_filter_mask
+        bright_and_baseline = [(m[i] | baseline_filter_mask[i]).all() 
+                               for i in range(self.n_taus)]
+        bright_and_baseline = np.array(bright_and_baseline)
+        result = enough_filters & bright_and_baseline
         return result
