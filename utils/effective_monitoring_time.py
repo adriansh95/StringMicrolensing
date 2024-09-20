@@ -3,7 +3,6 @@ This module provides the effective_monitoring_time function and its helpers.
 """
 from collections import defaultdict
 import numpy as np
-import os
 from numba import njit
 
 FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
@@ -165,6 +164,7 @@ class _FilterState():
         self.n_baseline = np.zeros((n_taus, 7), dtype=np.int32)
 
     def update(self, n_bright):
+        """update self"""
         self.n_bright = n_bright
         self.n_baseline = self.n_all - n_bright
 
@@ -174,7 +174,8 @@ class _TimeState():
         self.start_idx = np.zeros(n_taus, dtype=np.int32)
         self.end_idx = np.zeros(n_taus, dtype=np.int32)
 
-    def update(self, t_start, start_idx, end_idx): # needs more args?
+    def update(self, t_start, start_idx, end_idx):
+        """update self"""
         self.t_start = t_start
         self.start_idx = start_idx
         self.end_idx = end_idx
@@ -187,6 +188,7 @@ class _LcScannerState():
         self.this_window_good = np.full(n_taus, False)
 
 class LcScanner():
+    """This class includes the record_windows method and its helpers"""
     FILTERS = np.array(['u', 'g', 'r', 'i', 'z', 'Y', "VR"])
     FILTER_ORDER = {'u': 0, 'g': 1, 'r': 2, 'i': 3, 'z': 4, 'Y': 5, 'VR': 6}
 
@@ -196,10 +198,10 @@ class LcScanner():
         self.taus = taus
         self.n_samples = 0
         self.n_filters_req = n_filters_req
-        self.tau_idx = np.arange(n_taus)
         self.state = _LcScannerState(n_taus)
 
     def update(self, t_start, start_idx, end_idx, n_bright):
+        """Update the scanner's state"""
         self.state.time.update(t_start, start_idx, end_idx)
         self.state.filter.update(n_bright)
         self.state.last_window_good = self.state.this_window_good
@@ -212,71 +214,101 @@ class LcScanner():
 
     @classmethod
     def filter_map(cls, char):
-        foo = np.vectorize(cls._filter_map)
-        result = foo(char)
+        """This method maps [u, g, r, i, z, Y] to [0, 1, 2, 3, 4, 5]"""
+        mapper = np.vectorize(cls._filter_map)
+        result = mapper(char)
         return result
 
     def record_windows(self, dataframe):
+        """This method is used to scan a lightcurve and find time windows
+        during which a lensing event of duration tau could begin and
+        would, in principle, be detectable"""
         mjds = dataframe["mjd"].values
         filters = dataframe["filter"].values
-        exposure_ends = (dataframe["mjd"] + 
+        exposure_ends = (dataframe["mjd"] +
                          (dataframe["exptime"] / 86400)).values
         result = self._record_windows(mjds, filters, exposure_ends)
         return result
 
     def _record_windows(self, mjds, filters, exposure_ends):
-        self._setup(mjds, filters):
-        result = np.full((self.n_samples * 2, self.n_taus)), np.nan)
+        self._setup(mjds, filters)
+        result = np.full((self.n_samples * 2, self.n_taus), np.nan)
 
         # Shift, scan, record, repeat
         for i in range(self.n_samples):
             # Compute time between beginning of t_start and first bright sample
-            delta_t_start = (mjds[self.state.time.start_idx] - 
-                              self.state.time.t_start)
-            # Find the difference between the end of the bright window and the
-            # the first baseline sample after the bright window
-            delta_t_end = self._delta_t_end(mjds)
-            # There's some amount of time the window can safely move to the right
-            # along The lightcurve before the start or end hits another sample
-            # This keeps track of whether its the start of the window that hits
-            # a sample first, or the end.
-            smaller_delta_t_start = delta_t_start < delta_t_end
-            # Add 1 to start_idx
-            # if the next sample is outgoing. Add 1 to end_idx
-            # if the next sample is incoming.
-            t_idx_shift = np.where(smaller_delta_t_start, 1, 0)
-            # Change the bright and baseline filters counters.
-            # Get the index of the next filter for each tau.
-            # This is start_idx
-            # if the next sample is outgoing, end_idx otherwise.
-            # If the bright window
-            # Has extended beyond the end of the lightcurve, delta_t_end is 
-            # np.inf, so smaller_delta_t_start will return start_idx
-            next_filter_idx = np.where(smaller_delta_t_start,
-                                       self.state.time.start_idx,
-                                       self.state.time.end_idx)
-            # Get the next filter using these idxs. 
-            next_filter = filters[next_filter_idx]
-            next_filter_number = self.__class__.filter_map(next_filter)
-            # If the next filter is outgoing (smaller_delta_t_start) subtract from
-            # n_filters_bright and add to n_filters_baseline
-            filter_shift = np.where(smaller_delta_t_start, -1, 1)
-            self._shift_window(exposure_ends, start_idx_shift, filter_shift, filter_number)
+            self._shift_window(mjds, filters, exposure_ends)
+            # self._shift_window(exposure_ends, t_idx_shift, filter_shift, filter_number)
+            # print(self.state.time.start_idx, self.state.time.end_idx)
             result[i] = self._record_t_start()
 
+        return result
+
     def _record_t_start(self):
-        window_changed = (self.state.last_window_good & ~self.state.this_window_good)
+        window_changed = self.state.last_window_good & ~self.state.this_window_good
         result = np.where(window_changed, self.state.time.t_start, np.nan)
         return result
 
-    def _shift_window(self, exposure_ends, t_shift, filter_shift, filter_number)
+    def _shift_window(self, mjds, filters, exposure_ends):
+        # Time between window start and start of first sample "in" window
+        dt_start0 = mjds[self.state.time.start_idx] - self.state.time.t_start
+        # Time between window start and end of first sample "in" window
+        dt_start1 = (exposure_ends[self.state.time.start_idx] -
+                     self.state.time.t_start)
+        # Time between window end and start of first incoming sample
+        dt_end0 = (mjds[self.state.time.end_idx] -
+                   (self.state.time.t_start + self.taus))
+        # Time between window end and end of first incoming sample
+        dt_end1 = (exposure_ends[self.state.time.end_idx] -
+                   (self.state.time.t_start + self.taus))
+        next_sample_outgoing = dt_start0 < dt_end0
+        outgoing_sample_ends = dt_start1 < dt_end1
+        equally_close = dt_start0 == dt_end0
+        next_t_start = np.where(next_sample_outgoing,
+                                self.state.time.t_start + dt_start1,
+                                self.state.time.t_start + dt_end1)
+        
+        
+        
+        
+        # Find the difference between the end of the bright window and the
+        # the first baseline sample after the bright window
+        delta_t_end = self._delta_t_end(mjds)
+        # There's some amount of time the window can safely move to the right
+        # along The lightcurve before the start or end hits another sample
+        # This keeps track of whether its the start of the window that hits
+        # a sample first, or the end.
+        # print(self.state.time.t_start, delta_t_start, delta_t_end)
+        smaller_delta_t_start = delta_t_start < delta_t_end
+        # Add 1 to start_idx
+        # if the next sample is outgoing. Add 1 to end_idx
+        # if the next sample is incoming.
+        t_idx_shift = np.where(smaller_delta_t_start, 1, 0)
+        # Change the bright and baseline filters counters.
+        # Get the index of the next filter for each tau.
+        # This is start_idx
+        # if the next sample is outgoing, end_idx otherwise.
+        # If the bright window
+        # Has extended beyond the end of the lightcurve, delta_t_end is
+        # np.inf, so smaller_delta_t_start will return start_idx
+        next_filter_idx = np.where(smaller_delta_t_start,
+                                   self.state.time.start_idx,
+                                   self.state.time.end_idx)
+        # Get the next filter using these idxs.
+        next_filter = filters[next_filter_idx]
+        filter_number = self.__class__.filter_map(next_filter)
+        # If the next filter is outgoing (smaller_delta_t_start) subtract from
+        # n_filters_bright and add to n_filters_baseline
+        filter_shift = np.where(smaller_delta_t_start, -1, 1)
+
         new_start_idx = self.state.time.start_idx + t_shift
         new_end_idx = self.state.time.end_idx - (t_shift - 1)
+        # print(new_end_idx)
         new_t_start = self._compute_t_start(exposure_ends)
         new_n_bright = self.state.filter.n_bright
         new_n_bright[:, filter_number] += filter_shift
-        self.update(new_start_idx, new_end_idx, new_n_bright)
-            
+        self.update(new_t_start, new_start_idx, new_end_idx, new_n_bright)
+
     def _setup(self, mjds, filters):
         self._setup_time_state(mjds)
         self._setup_filter_state(filters)
@@ -302,28 +334,39 @@ class LcScanner():
                                     mode="clip")
         start1 = (exposure_ends.take(self.state.time.end_idx - 1,
                                      mode="clip")  - self.taus)
-        condition = (start0 > start1)
+        condition = start0 > start1
         result = np.where(condition, start0, start1)
         return result
 
     def _delta_t_end(self, mjds):
         dt_end = (mjds.take(self.state.time.end_idx, mode="clip")
                   - (self.state.time.t_start + self.taus))
+        print(self.state.time.t_start)
+        print(mjds.take(self.state.time.end_idx, mode="clip"))
+        print(dt_end)
         result = np.where(dt_end >= 0, dt_end, np.inf)
         return result
 
-    @njit
     def _good_window(self):
-        bright_filter_mask = self.state.filters.n_bright > 0
-        baseline_filter_mask = self.state.filters.n_baseline > 0
-        enough_filters = (bright_filter_mask.sum(axis=1) > 
-                          (self.n_filters_req - 1))
+        bright_filter_mask = self.state.filter.n_bright > 0
+        baseline_filter_mask = self.state.filter.n_baseline > 0
+        result = self._numba_good_window(bright_filter_mask,
+                                         baseline_filter_mask,
+                                         self.n_filters_req,
+                                         self.n_taus)
+        return result
+
+    @staticmethod
+    @njit
+    def _numba_good_window(bright_mask, baseline_mask, n_filters_req, n_taus):
+        enough_filters = (bright_mask.sum(axis=1) > (n_filters_req - 1))
+
         # In case I choose not to use Numba here,
         #     bright_and_baseline = (~bright_filter_mask | baseline_filter_mask).all(axis=1)
         # is equivalent but quite a bit slower.
-        m = ~bright_filter_mask
-        bright_and_baseline = [(m[i] | baseline_filter_mask[i]).all() 
-                               for i in range(self.n_taus)]
+        m = ~bright_mask
+        bright_and_baseline = [(m[i] | baseline_mask[i]).all()
+                               for i in range(n_taus)]
         bright_and_baseline = np.array(bright_and_baseline)
         result = enough_filters & bright_and_baseline
         return result
