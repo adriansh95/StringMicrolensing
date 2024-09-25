@@ -4,6 +4,12 @@ more than one module in the same directory
 """
 import numpy as np
 
+FILTER_ORDER = {"u": 0, "g": 1, "r": 2, "i": 3, "z": 4, "Y": 5, "VR": 6}
+
+def filter_map(char):
+    result = FILTER_ORDER[char]
+    return result
+
 def get_bounding_idxs(cluster_label_array):
     """This function finds time-contiguous sequences of measurements within
     a lightcurve which were labelled bright by the gaussian KDE method
