@@ -44,3 +44,19 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     result = df.assign(delta_mag=df[mag_column] - baseline,
                        delta_mag_err=df[magerr_column] + baseline_err)
     return result
+
+def write_query(i_batch, batch_size, db):
+    sub_query = f"""
+    SELECT id 
+        FROM {db}
+        WHERE row_number BETWEEN {i_batch * batch_size} AND {(i_batch + 1) * batch_size - 1}
+    """
+    result = f"""
+    SELECT m.objectid, m.filter, m.mag_auto, m.magerr_auto, m.mjd, m.exposure, e.exptime
+        FROM nsc_dr2.meas AS m
+        INNER JOIN nsc_dr2.exposure AS e
+        ON e.exposure = m.exposure
+        WHERE m.objectid IN ({sub_query})
+    """
+    return result
+
