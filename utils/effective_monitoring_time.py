@@ -57,12 +57,13 @@ class _LcScannerState():
 
 class LcScanner():
     """This class includes the record_windows method and its helpers"""
-    def __init__(self, taus, n_filters_req=2):
+    def __init__(self, taus, n_filters_req=2, min_per_filter=1):
         n_taus = len(taus)
         self.n_taus = n_taus
         self.taus = taus
         self.n_samples = 0
         self.n_filters_req = n_filters_req
+        self.min_per_filter = min_per_filter
         self.state = _LcScannerState(n_taus)
 
     def update(self, start_idx, end_idx, t_start, n_bright):
@@ -95,8 +96,8 @@ class LcScanner():
                                  self.state.time.t_start,
                                  np.nan)
 
-        result = result[~np.isnan(result).all(axis=1)]
         result.sort(axis=0)
+        result = result[(np.isfinite(result)).any(axis=1)]
         return result
 
     def _shift_window(self, times, filter_idx):
@@ -146,14 +147,19 @@ class LcScanner():
         result = self._numba_good_window(n_bright,
                                          n_baseline,
                                          self.n_filters_req,
+                                         self.min_per_filter,
                                          self.n_taus)
         return result
 
     @staticmethod
     @njit
-    def _numba_good_window(n_bright, n_baseline, n_filters_req, n_taus):
-        bright_mask = n_bright > 0
-        baseline_mask = n_baseline > 0
+    def _numba_good_window(n_bright,
+                           n_baseline,
+                           n_filters_req,
+                           min_per_filter,
+                           n_taus):
+        bright_mask = n_bright > (min_per_filter - 1)
+        baseline_mask = n_baseline > 1
         enough_filters = (bright_mask.sum(axis=1) > (n_filters_req - 1))
 
         # In case I choose not to use Numba here,
