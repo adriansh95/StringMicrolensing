@@ -39,9 +39,9 @@ def _label_modality(samples, weights, bandwidth):
 
     return result
 
-def _cl_apply(df, bandwidth):
-    samples = df[df.columns[2]].values
-    weights = np.power(df[df.columns[3]].values, -2)
+def _cl_apply(df, bandwidth, mag_column, magerr_column):
+    samples = df[mag_column].values
+    weights = np.power(df[magerr_column].values, -2)
     idxs = df.index
     modality_result = _label_modality(samples, weights, bandwidth)
     result = _label_cluster_membership(samples, modality_result["modes"], modality_result["min"])
@@ -56,9 +56,8 @@ def cluster_label_dataframe(df,
     cluster membership of each sample. 1 encodes baseline, 0 encodes bright
     excursions from baseline, and -1 encodes a star with unstable photometry
     (too many peaks in the KDE)."""
-    l = ["objectid", "filter", mag_column, magerr_column]
-    g = df[l].groupby(by=["objectid", "filter"], sort=False, group_keys=False)
-    cluster_label = g.apply(_cl_apply, bandwidth)
+    g = df.groupby(by=["objectid", "filter"], sort=False, group_keys=False)
+    cluster_label = g.apply(_cl_apply, bandwidth, mag_column, magerr_column)
     result = df.assign(cluster_label=cluster_label)
     return result
 
