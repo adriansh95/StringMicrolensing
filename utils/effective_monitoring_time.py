@@ -126,18 +126,26 @@ class LcScanner():
         self.state.reset()
         n_samples = len(times)
         self.n_samples = n_samples
-        np.add.at(self.state.filter.n_all,
-                  filter_idx,
-                  1)
+        self.state.filter.n_all += np.bincount(filter_idx, minlength=7)
 
     def _compute_n_bright(self, filter_idx, start_idx, end_idx):
-        result = np.zeros(self.state.filter.n_bright.shape)
+        result_shape = self.state.filter.n_bright.shape
+        result = self._numba_n_bright(result_shape,
+                                      filter_idx, 
+                                      start_idx, 
+                                      end_idx)
+        return result
 
-        for i in range(self.n_taus):
+    @staticmethod
+    @njit
+    def _numba_n_bright(shape, filter_idx, start_idx, end_idx):
+        result = np.zeros(shape)
+        
+        for i in range(shape[0]):
             sti = start_idx[i]
             endi = end_idx[i]
             f_idx = filter_idx[sti:endi]
-            np.add.at(result[i], f_idx, 1)
+            result[i] += np.bincount(f_idx, minlength=7)
 
         return result
 
