@@ -59,4 +59,3 @@ def write_query(i_batch, batch_size, db):
         WHERE m.objectid IN ({sub_query})
     """
     return result
-
