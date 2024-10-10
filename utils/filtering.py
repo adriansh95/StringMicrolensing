@@ -17,7 +17,7 @@ def _weighted_std_err(weights):
 
 def unstable_filter(df):
     """Returns True if the photometry is unstable (too many peaks in the KDE)"""
-    result = ~((df["cluster_label"] == -1).any())
+    result = df["cluster_label"] == -1).any()
     return result
 
 def lens_filter(df, **kwargs):
