@@ -17,7 +17,7 @@ def _weighted_std_err(weights):
 
 def unstable_filter(df):
     """Returns True if the photometry is unstable (too many peaks in the KDE)"""
-    result = df["cluster_label"] == -1).any()
+    result = (df["cluster_label"] == -1).any()
     return result
 
 def lens_filter(df, **kwargs):
@@ -35,51 +35,52 @@ def lens_filter(df, **kwargs):
     n_windows = len(lensed_idxs)
 
     if n_windows > 0:
-        df_index = df.index
 
         if check_achromatic:
-            achromatic = [_check_achromaticity(df, df_index[pair[0]+1: pair[1]])
+            achromatic = [_check_achromaticity(df, pair)
                           for pair in lensed_idxs]
         else:
             achromatic = np.full(n_windows, True)
 
         if check_factor_of_two:
-            g = df.groupby(by="filter", sort=False)
-            factor_of_two = [_check_factor(df, g, df_index[pair[0]+1: pair[1]], **kwargs)
+            g = df.groupby(by="filter")
+            factor_of_two = [_check_factor(df, g, pair, **kwargs)
                              for pair in lensed_idxs]
         else:
             factor_of_two = np.full(n_windows, True)
 
         enough_samples = [pair[1] - pair[0] > min_n_samples for pair in lensed_idxs]
+        print(all(achromatic), all(factor_of_two), all(enough_samples))
         result = all(achromatic) & all(factor_of_two) & all(enough_samples)
     else:
         result = False
 
     return result
 
-def _check_factor(df, g, df_index_slice, **kwargs):
+def _check_factor(df, df_gb, idx_bounds, **kwargs):
     mag_column = kwargs.get("mag_column", "mag_auto")
     magerr_column = kwargs.get("magerr_column", "magerr_auto")
-    filters = df.loc[df_index_slice, "filter"]
-    filters_unique = filters.unique()
+    l, u = idx_bounds
+    idx_range = np.arange(l+1, u)
+    g_idx = df_gb.indices
+    filters = df["filter"].iloc[l+1: u].unique()
     results = np.full(len(filters), False)
 
-    for i, f in enumerate(filters_unique):
-        group = g.get_group(f)
+    for i, f in enumerate(filters):
+        group = df_gb.get_group(f)
+        mask_bright = np.isin(df_gb.indices[f], idx_range)
         mask_baseline = group["cluster_label"].values.astype(bool)
-        group_idxs = group.index
-        mask_idxs = np.isin(group_idxs, df_index_slice)
         samples = group[mag_column].values
         weights = group[magerr_column].values**-2
-        results[i] = _factor_of_two(samples, weights, mask_idxs, mask_baseline)
+        results[i] = _factor_of_two(samples, weights, mask_bright, mask_baseline)
 
     result = results.all()
     return result
 
 @njit
-def _factor_of_two(samples, weights, mask_idxs, mask_baseline):
-    mu0 = np.average(samples[mask_idxs], weights=weights[mask_idxs])
-    sig0 = _weighted_std_err(weights[mask_idxs])
+def _factor_of_two(samples, weights, mask_bright, mask_baseline):
+    mu0 = np.average(samples[mask_bright], weights=weights[mask_bright])
+    sig0 = _weighted_std_err(weights[mask_bright])
     mu1 = np.average(samples[mask_baseline], weights=weights[mask_baseline])
     sig1 = _weighted_std_err(weights[mask_baseline])
     mu_diff = mu1 - mu0
@@ -91,8 +92,9 @@ def _factor_of_two(samples, weights, mask_idxs, mask_baseline):
     result = np.logical_and(within_bounds, five_sigma)
     return result
 
-def _check_achromaticity(df, df_index_slice):
-    result = df.loc[df_index_slice, "filter"].unique().size > 1
+def _check_achromaticity(df, idx_bounds):
+    l, u = idx_bounds
+    result = df["filter"].iloc[l+1: u].unique().size > 1
     return result
 
 
