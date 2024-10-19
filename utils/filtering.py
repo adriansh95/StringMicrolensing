@@ -5,7 +5,7 @@ and their helper functions.
 
 import numpy as np
 from numba import njit
-from .helpers import get_bounding_idxs
+from utils.helpers import get_bounding_idxs
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
 
@@ -50,7 +50,6 @@ def lens_filter(df, **kwargs):
             factor_of_two = np.full(n_windows, True)
 
         enough_samples = [pair[1] - pair[0] > min_n_samples for pair in lensed_idxs]
-        print(all(achromatic), all(factor_of_two), all(enough_samples))
         result = all(achromatic) & all(factor_of_two) & all(enough_samples)
     else:
         result = False
