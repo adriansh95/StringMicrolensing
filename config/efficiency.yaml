@@ -1,0 +1,19 @@
+data_retrieval:
+  batch_size: 100000
+  num_batches: 67
+  poll_rate: 10
+
+synthetic_events:
+  n_events: 1000000
+  batch_size: 10000
+
+scanner:
+  v0:
+    n_filters_req: 2
+    min_per_filter: 1
+  v1:
+    n_filters_req: 3
+    min_per_filter: 1
+  v2:
+    n_filters_req: 3
+    min_per_filter: 2
