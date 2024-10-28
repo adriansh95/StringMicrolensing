@@ -16,7 +16,8 @@ def kde_pdf(samples, weights, bandwidth):
     returns a dict containing the x and y(x).
     """
     kde = gaussian_kde(samples, bw_method=1, weights=weights)
-    kde.set_bandwidth(bandwidth / np.sqrt(kde.covariance[0, 0]))
+    bw = bandwidth(weights)
+    kde.set_bandwidth(bw / np.sqrt(kde.covariance[0, 0]))
     low = samples.min() - 1
     high = samples.max() + 1
     x = np.linspace(low, high, num=100)
@@ -57,7 +58,13 @@ def cluster_label_dataframe(df,
     excursions from baseline, and -1 encodes a star with unstable photometry
     (too many peaks in the KDE)."""
     g = df.groupby(by=["objectid", "filter"], sort=False, group_keys=False)
-    cluster_label = g.apply(_cl_apply, bandwidth, mag_column, magerr_column)
+
+    if bandwidth == "variable":
+        bw = lambda x: np.sqrt(np.mean(x**2))
+    else:
+        bw = lambda x: bandwidth
+
+    cluster_label = g.apply(_cl_apply, bw, mag_column, magerr_column)
     result = df.assign(cluster_label=cluster_label)
     return result
 
