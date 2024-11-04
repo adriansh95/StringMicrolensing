@@ -104,13 +104,13 @@ def unimodal_filter(df):
 
 def lightcurve_classifier(lc, **params):
 
-    if ~unstable_filter(lc):
+    if unstable_filter(lc):
         result = "unstable"
     elif lens_filter(lc, **params):
         result = "background"
     elif unimodal_filter(lc):
         result = "unimodal"
     else:
-        result = np.nan
+        result = "NA"
 
     return result
