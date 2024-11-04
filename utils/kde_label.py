@@ -16,7 +16,7 @@ def kde_pdf(samples, weights, bandwidth):
     returns a dict containing the x and y(x).
     """
     kde = gaussian_kde(samples, bw_method=1, weights=weights)
-    bw = bandwidth(weights)
+    bw = bandwidth(weights**(-1/2))
     kde.set_bandwidth(bw / np.sqrt(kde.covariance[0, 0]))
     low = samples.min() - 1
     high = samples.max() + 1
