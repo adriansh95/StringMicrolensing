@@ -15,29 +15,33 @@ def _weighted_std_err(weights):
     result = np.sqrt(1 / weights.sum())
     return result
 
-def unstable_filter(df):
+def unstable_filter(df, **kwargs):
     """Returns True if the photometry is unstable (too many peaks in the KDE)"""
-    result = (df["cluster_label"] == -1).any()
+    label_column = kwargs.get("label_column", "cluster_label")
+    result = (df[label_column] == -1).any()
     return result
 
 def lens_filter(df, **kwargs):
     """
-    df must be sorted by time.
-    kwargs and defaults are min_n_samples=2, achromatic=True, 
-    factor_of_two=True, mag_column='mag_auto', magerr_column='magerr_auto',
+    df must be sorted by time
+    kwargs and defaults are samples_per_filter=2, achromatic=True,
+    unique_filters=2, factor_of_two=True, mag_column='mag_auto',
+    magerr_column='magerr_auto', label_column="cluster_label",
     mag_column and magerr_column are passed to _check_factor
     """
-    min_n_samples = kwargs.get("min_n_samples", 2)
+    samples_per_filter = kwargs.get("samples_per_filter", 2)
+    unique_filters = kwargs.get("unique_filters", 2)
     check_achromatic = kwargs.get("achromatic", True)
     check_factor_of_two = kwargs.get("factor_of_two", True)
-    cl = df["cluster_label"].values
+    label_column= kwargs.get("label_column", "cluster_label")
+    cl = df[label_column].values
     lensed_idxs = get_bounding_idxs(cl)
     n_windows = len(lensed_idxs)
 
     if n_windows > 0:
 
         if check_achromatic:
-            achromatic = [_check_achromaticity(df, pair)
+            achromatic = [_check_achromaticity(df, pair, unique_filters)
                           for pair in lensed_idxs]
         else:
             achromatic = np.full(n_windows, True)
@@ -49,7 +53,7 @@ def lens_filter(df, **kwargs):
         else:
             factor_of_two = np.full(n_windows, True)
 
-        enough_samples = [pair[1] - pair[0] > min_n_samples for pair in lensed_idxs]
+        enough_samples = [pair[1] - pair[0] > samples_per_filter for pair in lensed_idxs]
         result = all(achromatic) & all(factor_of_two) & all(enough_samples)
     else:
         result = False
@@ -59,6 +63,7 @@ def lens_filter(df, **kwargs):
 def _check_factor(df, df_gb, idx_bounds, **kwargs):
     mag_column = kwargs.get("mag_column", "mag_auto")
     magerr_column = kwargs.get("magerr_column", "magerr_auto")
+    label_column = kwargs.get("label_column", "cluster_label")
     l, u = idx_bounds
     idx_range = np.arange(l+1, u)
     g_idx = df_gb.indices
@@ -68,7 +73,7 @@ def _check_factor(df, df_gb, idx_bounds, **kwargs):
     for i, f in enumerate(filters):
         group = df_gb.get_group(f)
         mask_bright = np.isin(df_gb.indices[f], idx_range)
-        mask_baseline = group["cluster_label"].values.astype(bool)
+        mask_baseline = group[label_column].values.astype(bool)
         samples = group[mag_column].values
         weights = group[magerr_column].values**-2
         results[i] = _factor_of_two(samples, weights, mask_bright, mask_baseline)
@@ -91,24 +96,24 @@ def _factor_of_two(samples, weights, mask_bright, mask_baseline):
     result = np.logical_and(within_bounds, five_sigma)
     return result
 
-def _check_achromaticity(df, idx_bounds):
+def _check_achromaticity(df, idx_bounds, unique_filters):
     l, u = idx_bounds
-    result = df["filter"].iloc[l+1: u].unique().size > 1
+    result = df["filter"].iloc[l+1: u].unique().size > (unique_filters - 1)
     return result
 
-
-def unimodal_filter(df):
-    """Returns true if all(df["cluster_label"] == 1) otherwise returns false."""
-    result = (df["cluster_label"].values.astype(bool)).all()
+def unimodal_filter(df, **kwargs):
+    """Returns true if all(df[label_column] == 1) otherwise returns false."""
+    label_column = kwargs.get("label_column", "cluster_label")
+    result = (df[label_column].values.astype(bool)).all()
     return result
 
 def lightcurve_classifier(lc, **params):
 
-    if unstable_filter(lc):
+    if unstable_filter(lc, **params):
         result = "unstable"
     elif lens_filter(lc, **params):
         result = "background"
-    elif unimodal_filter(lc):
+    elif unimodal_filter(lc, **params):
         result = "unimodal"
     else:
         result = "NA"
