@@ -3,88 +3,37 @@ import pandas as pd
 import os
 import time
 
-from dl import queryClient as qc
-from dl.helpers.utils import convert
 from utils.kde_label import cluster_label_dataframe
 from utils.helpers import get_bounding_idxs
 from pyarrow.lib import ArrowInvalid
 
-def parquet_to_mydb(read_dir, i_tau, version):
-    batches = np.arange(67)
-    schema = "objectid,text\nnumber,int\nstart,real\nend,real"
-    qc.mydb_drop(f"windows_temp")
-    qc.mydb_create(f"windows_temp", schema, drop=True)
+def t_start_df(filtered_df, n_samples):
+    rng = np.random.default_rng()
+    s = filtered_df.xs("start", level=2)
+    e = filtered_df.xs("end", level=2)
+    time_df = pd.concat([s, e], axis=1)
+    time_df.columns = ["start", "end"]
+    result = time_df.sample(n=n_samples)
+    result["t_start"] = rng.uniform(low=result["start"], high=result["end"])
+    return result
 
-    for batch in batches:
-        df_file = os.path.join(read_dir, 
-                               f"good_windows_batch{batch}_{version}.parquet")
+def sample_good_windows(filtered_ddf):
+    s = filtered_ddf.map_partitions(lambda x: x.xs("start", level=2),
+                                    meta=(None, float))
+    e = filtered_ddf.map_partitions(lambda x: x.xs("end", level=2),
+                                    meta=(None, float))
+    time_ddf = dd.concat([s, e], axis=1)
+    time_ddf.columns = ["start", "end"]
+    n_rows = time_ddf.shape[0].compute()
+    n_samples = 1000000
 
-        try:
-            window_df = pd.read_parquet(df_file, columns=[f"{i_tau}"]).dropna()
-        except ArrowInvalid as e:
-            continue
-
-        t_df = pd.concat([window_df.xs("start", level=2),
-                          window_df.xs("end", level=2)],
-                         axis=1, keys=["start", "end"])
-        t_df.reset_index(inplace=True)
-        t_df.columns = t_df.columns.get_level_values(0)
-        qc.mydb_insert(f"windows_temp", 
-                       t_df.to_csv(index=False), schema=schema)
-
-def t_start_table(n_windows, i_tau, version, drop=False):
-    id_q = "SELECT objectid FROM mydb://numbered_stable_stars_sep2"
-    sq = f"""
-    SELECT *
-        FROM mydb://windows_temp
-        WHERE objectid IN ({id_q})
-        ORDER BY RANDOM()
-        LIMIT {n_windows}"""
-    query = f"""
-    SELECT 
-        (ROW_NUMBER() OVER () - 1) AS rn,
-        w.objectid, 
-        w.number, 
-        w.start + (RANDOM() * (w.end - w.start)) AS t_start
-    FROM ({sq}) AS w"""
-    qc.query(sql=query, out=f"mydb://t_start_{i_tau}_{version}", drop=drop)
-    qc.mydb_index(f"t_start_{i_tau}_{version}", "objectid")
-    qc.mydb_index(f"t_start_{i_tau}_{version}", "rn")
-
-def make_lightcurve_dataframe(i_tau, i_batch, batch_size, version):
-    sq = f"""
-    SELECT *
-        FROM mydb://t_start_{i_tau}_{version}
-        WHERE rn BETWEEN {i_batch * batch_size} 
-        AND {(i_batch + 1) * batch_size - 1}
-    """
-    qc.query(sql=sq, out="mydb://temp", drop=True)
-    qc.mydb_index("temp", "objectid")
-    q = f"""
-    SELECT 
-        t.objectid, t.number, t.t_start, 
-        m.filter, m.mag_auto, m.magerr_auto, m.mjd,
-        m.exptime, (m.mjd + (m.exptime / (86400 * 2))) AS mjd_mid
-        FROM mydb://stable_lcs AS m
-        INNER JOIN mydb://temp AS t
-        ON t.objectid = m.objectid
-    """
-    job_id = qc.query(sql=q, async_=True, timeout=3600)
-
-    while qc.status(job_id) == "EXECUTING":
-        time.sleep(10)
-
-    if qc.status(job_id) == "COMPLETED":
-        result = convert(qc.results(job_id))
-        result.sort_values(by=["objectid", "mjd"], inplace=True)
-    elif qc.status(job_id) == "ERROR":
-        print(f"Error batch {i_batch}: {qc.error(job_id)}")
-        result = None
+    if n_rows == 0:
+        frac = 0
     else:
-        print(f"Error batch {i_batch}: Something unexpected occurred")
-        result = None
+        frac = min(n_samples / n_rows, 1)
 
-    qc.mydb_drop("temp")
+    sampled_ddf = time_ddf.sample(frac=frac)
+    result = sampled_ddf.compute()
     return result
 
 def lens_lc(lc, tau):
@@ -98,7 +47,8 @@ def lens_lc(lc, tau):
     lc["true_label"] = true_label
     return lc
 
-def count_windows(df):
-    cl = df["cluster_label"].to_numpy()
+def count_windows(df, cl_col):
+    cl = df[cl_col].to_numpy()
     result = len(get_bounding_idxs(cl))
     return result
+
