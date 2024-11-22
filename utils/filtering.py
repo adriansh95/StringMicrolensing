@@ -4,8 +4,10 @@ and their helper functions.
 """
 
 import numpy as np
+
 from numba import njit
 from utils.helpers import get_bounding_idxs
+from collections import Counter
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
 
@@ -23,28 +25,28 @@ def unstable_filter(df, **kwargs):
 
 def lens_filter(df, **kwargs):
     """
-    df must be sorted by time
-    kwargs and defaults are samples_per_filter=2, achromatic=True,
+    kwargs and defaults are samples_per_filter=2
     unique_filters=2, factor_of_two=True, mag_column='mag_auto',
     magerr_column='magerr_auto', label_column="cluster_label",
     mag_column and magerr_column are passed to _check_factor
     """
     samples_per_filter = kwargs.get("samples_per_filter", 2)
     unique_filters = kwargs.get("unique_filters", 2)
-    check_achromatic = kwargs.get("achromatic", True)
     check_factor_of_two = kwargs.get("factor_of_two", True)
     label_column= kwargs.get("label_column", "cluster_label")
+    df = df.sort_values(by="mjd")
     cl = df[label_column].values
     lensed_idxs = get_bounding_idxs(cl)
     n_windows = len(lensed_idxs)
 
     if n_windows > 0:
-
-        if check_achromatic:
-            achromatic = [_check_achromaticity(df, pair, unique_filters)
-                          for pair in lensed_idxs]
-        else:
-            achromatic = np.full(n_windows, True)
+        achromatic = [_check_achromaticity((df["filter"]
+                                            .iloc[pair[0]+1: pair[1]]
+                                            .to_numpy().flatten()
+                                           ),
+                                           unique_filters,
+                                           samples_per_filter)
+                      for pair in lensed_idxs]
 
         if check_factor_of_two:
             g = df.groupby(by="filter")
@@ -53,8 +55,7 @@ def lens_filter(df, **kwargs):
         else:
             factor_of_two = np.full(n_windows, True)
 
-        enough_samples = [pair[1] - pair[0] > samples_per_filter for pair in lensed_idxs]
-        result = all(achromatic) & all(factor_of_two) & all(enough_samples)
+        result = all(achromatic) & all(factor_of_two)
     else:
         result = False
 
@@ -66,14 +67,13 @@ def _check_factor(df, df_gb, idx_bounds, **kwargs):
     label_column = kwargs.get("label_column", "cluster_label")
     l, u = idx_bounds
     idx_range = np.arange(l+1, u)
-    g_idx = df_gb.indices
     filters = df["filter"].iloc[l+1: u].unique()
     results = np.full(len(filters), False)
 
     for i, f in enumerate(filters):
         group = df_gb.get_group(f)
         mask_bright = np.isin(df_gb.indices[f], idx_range)
-        mask_baseline = group[label_column].values.astype(bool)
+        mask_baseline = (group[label_column] == 1).to_numpy()
         samples = group[mag_column].values
         weights = group[magerr_column].values**-2
         results[i] = _factor_of_two(samples, weights, mask_bright, mask_baseline)
@@ -96,15 +96,16 @@ def _factor_of_two(samples, weights, mask_bright, mask_baseline):
     result = np.logical_and(within_bounds, five_sigma)
     return result
 
-def _check_achromaticity(df, idx_bounds, unique_filters):
-    l, u = idx_bounds
-    result = df["filter"].iloc[l+1: u].unique().size > (unique_filters - 1)
+def _check_achromaticity(vals, unique_filters, samples_per_filter):
+    c = Counter(vals)
+    result = ((len(c.keys()) >= unique_filters) &
+              (np.array(list(c.values())) >= samples_per_filter).all())
     return result
 
 def unimodal_filter(df, **kwargs):
     """Returns true if all(df[label_column] == 1) otherwise returns false."""
     label_column = kwargs.get("label_column", "cluster_label")
-    result = (df[label_column].values.astype(bool)).all()
+    result = (df[label_column] == 1).all()
     return result
 
 def lightcurve_classifier(lc, **params):
