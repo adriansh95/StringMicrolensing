@@ -4,6 +4,7 @@ import os
 import time
 
 from utils.kde_label import cluster_label_dataframe
+from utils.filtering import lightcurve_classifier
 from utils.helpers import get_bounding_idxs
 from pyarrow.lib import ArrowInvalid
 
@@ -50,5 +51,22 @@ def lens_lc(lc, tau):
 def count_windows(df, cl_col):
     cl = df[cl_col].to_numpy()
     result = len(get_bounding_idxs(cl))
+    return result
+
+def make_efficiency_df(df, idx, **kwargs):
+    g = df.groupby(by=["objectid", "number"], sort=False)
+    lc_class_df = g.apply(lambda x: lightcurve_classifier(x, **kwargs))
+    n_detections = sum(lc_class_df == "background")
+    n_injections = g.ngroups
+    n_correctly_labeled = (df["cluster_label"] == df["true_label"]).sum()
+    n_samples = df.shape[0]
+    n_windows = g.apply(count_windows, "cluster_label")
+    n_splits = (n_windows - 1).sum()
+    data = dict(n_detections=[n_detections],
+                n_injections=[n_injections],
+                n_correctly_labeled=[n_correctly_labeled],
+                n_samples=[n_samples],
+                n_splits=[n_splits])
+    result = pd.DataFrame(data=data, index=idx)
     return result
 
