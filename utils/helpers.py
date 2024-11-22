@@ -19,11 +19,11 @@ def get_bounding_idxs(cluster_label_array):
     n_total = len(cluster_label_array)
     idxs = np.arange(n_total)
     t_start = [i for i in idxs[:-1]
-               if cluster_label_array[i] == 1
+               if cluster_label_array[i] != 0
                and cluster_label_array[i+1] == 0]
     t_end = [i+1 for i in idxs[:-1]
              if cluster_label_array[i] == 0
-             and cluster_label_array[i+1] == 1]
+             and cluster_label_array[i+1] != 0]
 
     if cluster_label_array[0] == 0:
         t_start = np.concatenate(([-1], t_start))
