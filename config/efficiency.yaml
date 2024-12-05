@@ -8,11 +8,11 @@ synthetic_events:
 
 scanner:
   v0:
-    n_filters_req: 2
-    min_per_filter: 1
+    unique_filters: 2
+    samples_per_filter: 1
   v1:
-    n_filters_req: 3
-    min_per_filter: 1
+    unique_filters: 3
+    samples_per_filter: 1
   v2:
-    n_filters_req: 3
-    min_per_filter: 2
+    unique_filters: 3
+    samples_per_filter: 2
