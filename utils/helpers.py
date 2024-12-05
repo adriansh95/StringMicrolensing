@@ -6,6 +6,11 @@ import numpy as np
 
 FILTER_ORDER = {"u": 0, "g": 1, "r": 2, "i": 3, "z": 4, "Y": 5, "VR": 6}
 
+def weighted_std(vals, weights):
+    var = np.cov(vals, aweights=weights).item()
+    result = np.sqrt(var)
+    return result
+
 def filter_map(char):
     result = FILTER_ORDER[char]
     return result
