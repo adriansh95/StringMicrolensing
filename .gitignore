@@ -8,3 +8,4 @@ plots/*.png
 plots/*/*.png
 plots/*/*/*.png
 results/*/*.parquet
+utils/tasks/.*.sw*
