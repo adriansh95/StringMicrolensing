@@ -1,0 +1,9 @@
+tasks:
+  - name: BinObjects
+    arguments:
+      init_args:
+        - /Volumes/THESIS_DATA/objects/
+        - /Volumes/THESIS_DATA/results/bin_objects/
+      run_kwargs:
+        healpix_nside: 1024
+
