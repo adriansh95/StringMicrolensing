@@ -1,0 +1,10 @@
+scanner:
+  v0:
+    unique_filters: 2
+    samples_per_filter: 1
+  v1:
+    unique_filters: 3
+    samples_per_filter: 1
+  v2:
+    unique_filters: 3
+    samples_per_filter: 2
