@@ -1,0 +1,8 @@
+tasks:
+  - name: AnalyzeBackgrounds
+    arguments:
+      init_args:
+        - /Volumes/THESIS_DATA/results/kde_labelled_lightcurves/
+        - /Volumes/THESIS_DATA/results/backgrounds/
+    do_run: True 
+    do_concat: True

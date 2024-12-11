@@ -1,0 +1,10 @@
+tasks:
+  - name: SummaryTable
+    init_args:
+      - /Volumes/THESIS_DATA/results/kde_labelled_lightcurves/
+      - /Volumes/THESIS_DATA/results/summary_table/
+      - yaml_path: /Users/adrianshestakov/Work/stringScratch/config/efficiency.yaml
+    run_kwargs:
+      batch_range: [15, 66]
+      run_etl: False
+      run_concat_results: True

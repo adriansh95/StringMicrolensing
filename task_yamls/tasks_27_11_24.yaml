@@ -1,0 +1,14 @@
+tasks:
+  - name: Efficiency
+    arguments:
+      init_args:
+        - /Volumes/THESIS_DATA/results/efficiency/lensed_lightcurves/concatted_lcs/
+        - /Volumes/THESIS_DATA/results/efficiency/output_data/
+        - yaml_path: /Users/adrianshestakov/Work/stringScratch/config/efficiency.yaml
+      run_kwargs:
+        versions:
+          - v1
+          - v2
+        tau_range: [28, 29]
+    do_run: True 
+    do_concat: True
