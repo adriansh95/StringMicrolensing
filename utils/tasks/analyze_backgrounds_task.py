@@ -87,12 +87,20 @@ class AnalyzeBackgroundsTask(ETLTask):
 
     def run(self, **kwargs):
         """
-        Run the task. It accepts the following keyword arguments:
-            batch_range: (tuple, optional, default: (0, 66)): A tuple 
-                specifying the range of batch indices to process. The first
-                element specifies the starting index (inclusive) and the second
-                specifies the last (inclusive).
+        Run the task.
+
+        Parameters:
+        ----------
+        kwargs : dict
+            Keyword arguments for configuring the task. This method expects the 
+            following key(s):
+
+                - batch_range: (tuple, optional, default: (0, 66)): A tuple 
+                    specifying the start (inclusive) and stop (inclusive)
+                    batch index numbers to process. For example, 
+                    (0, 66) will process batches 0 through 66.
         """
+
         batch_range = kwargs.get("batch_range", (0, 66))
         first_batch = batch_range[0]
         last_batch = batch_range[1]
@@ -127,12 +135,11 @@ class AnalyzeBackgroundsTask(ETLTask):
 
     def get_extract_file_path(self, i_batch):
         """
-        Get the extract file path corresponding to batch index
+        Get the extract file path corresponding to batch index.
         """
         result = os.path.join(
             self.extract_dir,
-            f"kde_labelled_lightcurves_batch{i_batch}.parquet",
-
+            f"kde_labelled_lightcurves_batch{i_batch}.parquet"
         )
         return result
 
