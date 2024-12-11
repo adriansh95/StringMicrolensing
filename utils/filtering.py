@@ -4,6 +4,7 @@ and their helper functions.
 """
 
 import numpy as np
+import ipdb
 
 from numba import njit
 from utils.helpers import get_bounding_idxs
@@ -25,12 +26,12 @@ def unstable_filter(df, **kwargs):
 
 def lens_filter(df, **kwargs):
     """
-    kwargs and defaults are samples_per_filter=2
+    kwargs and defaults are samples_per_filter=1
     unique_filters=2, factor_of_two=True, mag_column='mag_auto',
     magerr_column='magerr_auto', label_column="cluster_label",
     mag_column and magerr_column are passed to _check_factor
     """
-    samples_per_filter = kwargs.get("samples_per_filter", 2)
+    samples_per_filter = kwargs.get("samples_per_filter", 1)
     unique_filters = kwargs.get("unique_filters", 2)
     check_factor_of_two = kwargs.get("factor_of_two", True)
     label_column= kwargs.get("label_column", "cluster_label")
@@ -40,18 +41,21 @@ def lens_filter(df, **kwargs):
     n_windows = len(lensed_idxs)
 
     if n_windows > 0:
-        achromatic = [_check_achromaticity((df["filter"]
-                                            .iloc[pair[0]+1: pair[1]]
-                                            .to_numpy().flatten()
-                                           ),
-                                           unique_filters,
-                                           samples_per_filter)
-                      for pair in lensed_idxs]
+        achromatic = [
+            _check_achromaticity(
+                df["filter"].iloc[pair[0]+1: pair[1]].to_numpy().flatten(),
+                unique_filters,
+                samples_per_filter
+            )
+            for pair in lensed_idxs
+        ]
 
         if check_factor_of_two:
             g = df.groupby(by="filter")
-            factor_of_two = [_check_factor(df, g, pair, **kwargs)
-                             for pair in lensed_idxs]
+            factor_of_two = [
+                _check_factor(df, g, pair, **kwargs)
+                for pair in lensed_idxs
+            ]
         else:
             factor_of_two = np.full(n_windows, True)
 
