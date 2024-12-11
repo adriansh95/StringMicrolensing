@@ -1,54 +1,105 @@
 """
 This module provides functions for analyzing candidate lensing events.
 """
+from collections import Counter
 import numpy as np
 import pandas as pd
 from .helpers import get_bounding_idxs
 
-def make_lensing_dataframe(df, time_column="mjd", exp_time_column="exptime"):
-    """This function assumes the dataframe has been sorted by the time_column
-    and filtered using lens_filter, and is intended for use only on lightcurves
+def make_lensing_dataframe(
+        df, 
+        time_column="mjd",
+        exp_time_column="exptime",
+        label_column="cluster_label"):
+    """This function assumes the dataframe has been filtered using lens_filter,
+    and is intended for use only on lightcurves
     with bright sequences (ie, no lightcurves which show only baseline).
     It calculates the earliest and latest start and stop times for a 
     string microlensing event."""
-    column_list = ["objectid", time_column, exp_time_column, "cluster_label", "filter"]
-    df_grouped = df[column_list].groupby(by=["objectid"], sort=False)
-    result = df_grouped.apply(_lens_apply)
+    column_list = [
+        "objectid",
+        time_column,
+        exp_time_column,
+        label_column,
+        "filter"
+    ]
+    df = df.sort_values(by=time_column)
+    df_grouped = df.groupby(by=["objectid"], sort=False)
+    lens_df = df_grouped[column_list].apply(_lens_apply)
+
+    if lens_df.shape[0] == 0:
+        result = pd.DataFrame(
+            columns=[
+                "t_start_max",
+                "t_end_max",
+                "t_start_min",
+                "t_end_min",
+                "n_u",
+                "n_g",
+                "n_r",
+                "n_i",
+                "n_z",
+                "n_Y",
+                "n_samples"
+            ],
+            index=pd.MultiIndex.from_arrays(
+                [[], []],
+                names=["objectid", "event_number"]
+            )
+        )
+    else:
+        result = lens_df
+
     return result
 
 def _lens_apply(df):
     s_per_day = 86400
-    cl_array = df["cluster_label"].values
-    df_indices = df.index
-    n_samples = len(cl_array)
+    cl_array = df.iloc[:, 3].to_numpy()
     bounding_idxs = get_bounding_idxs(cl_array)
     t_start_idxs = bounding_idxs[:, 0]
     t_end_idxs = bounding_idxs[:, 1]
-    t_start_min = df.iloc[t_start_idxs + 1, 1].values
-    t_end_min = (df.iloc[t_end_idxs - 1, 1] + df.iloc[t_end_idxs - 1, 2] / s_per_day).values
+    t_start_min = df.iloc[t_start_idxs + 1, 1].to_numpy()
+    t_end_min = (
+        df.iloc[t_end_idxs - 1, 1] +
+        df.iloc[t_end_idxs - 1, 2] / s_per_day
+    ).to_numpy()
 
     if t_start_idxs[0] == -1:
-        t_start0 = -np.inf
-        t_start_max = np.concatenate([[t_start0], (df.iloc[t_start_idxs[1:], 1] +
-                                              (df.iloc[t_start_idxs[1:], 2] / s_per_day)).values])
+        t_start_max = np.concatenate(
+            [
+                [-np.inf],
+                (
+                    df.iloc[t_start_idxs[1:], 1] +
+                    (df.iloc[t_start_idxs[1:], 2] / s_per_day)
+                ).to_numpy()
+            ]
+        )
     else:
-        t_start_max = (df.iloc[t_start_idxs, 1] +
-                   (df.iloc[t_start_idxs, 2] / s_per_day)).values
+        t_start_max = (
+            df.iloc[t_start_idxs, 1] +
+            (df.iloc[t_start_idxs, 2] / s_per_day)
+        ).to_numpy()
 
-    if t_end_idxs[-1] == n_samples:
-        t_end0 = np.inf
-        t_end_max = np.concatenate([df.iloc[t_end_idxs[:-1], 1].values, [t_end0]])
+    if t_end_idxs[-1] == len(cl_array):
+        t_end_max = np.concatenate([df.iloc[t_end_idxs[:-1], 1].values, [np.inf]])
     else:
-        t_end_max = df.iloc[t_end_idxs, 1].values
+        t_end_max = df.iloc[t_end_idxs, 1].to_numpy()
 
-    filters = [''.join(df.loc[df_indices[idx_pair[0] + 1: idx_pair[1]], "filter"])
-               for idx_pair in bounding_idxs]
-    data = {"t_start_max": t_start_max,
+    filter_counters = [
+        Counter(df.iloc[idx[0]+1: idx[1], 4]) for idx in bounding_idxs
+    ]
+    count_data = {
+        f"n_{f}": [c.get(f, 0) for c in filter_counters]
+        for f in ['u', 'g', 'r', 'i', 'z', 'Y']
+    }
+    count_data["n_samples"] = [(idx[1] - idx[0]) - 1 for idx in bounding_idxs]
+    t_data = {"t_start_max": t_start_max,
             "t_end_max": t_end_max, 
             "t_start_min": t_start_min, 
-            "t_end_min": t_end_min, 
-            "filters": filters}
+            "t_end_min": t_end_min}
+    data = t_data | count_data
     result = pd.DataFrame(data=data)
+    result.index.names = ["event_number"]
     return result
 
 def t_of_tau(taus, ts):
