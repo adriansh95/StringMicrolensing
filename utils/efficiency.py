@@ -6,7 +6,6 @@ import time
 from utils.kde_label import cluster_label_dataframe
 from utils.filtering import lightcurve_classifier
 from utils.helpers import get_bounding_idxs
-from pyarrow.lib import ArrowInvalid
 
 def t_start_df(filtered_df, n_samples):
     rng = np.random.default_rng()
