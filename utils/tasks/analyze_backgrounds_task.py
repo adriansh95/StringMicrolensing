@@ -63,7 +63,6 @@ class AnalyzeBackgroundsTask(ETLTask):
             filtered_data = (filtered_data.groupby(by="objectid")
                 .filter(lens_fil)
             )
-
             transformed_data = make_lensing_dataframe(
                 filtered_data,
                 label_column=cl_column
@@ -82,6 +81,7 @@ class AnalyzeBackgroundsTask(ETLTask):
             )
             transformed_data.index = transformed_data_index
             transformed_dataframes.append(transformed_data)
+
         result = pd.concat(transformed_dataframes, axis=0)
         return result
 
