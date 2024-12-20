@@ -14,34 +14,82 @@ class ETLTask(ABC):
     subclasses will inherit and must implement.
 
     Attributes:
-        extract_dir (str): Directory containing the input data files to be 
+        extract_dir (str): Directory containing the input data files to be
                            processed.
-        load_dir (str): Directory where the transformed data files will be 
+        load_dir (str): Directory where the transformed data files will be
                         written.
+    Methods:
+        extract (data_file_path: str, **kwargs: Any) -> (pandas.DataFrame):
+            Read in the data.
+        transform
+            (data: pandas.DataFrame, **kwargs: Any) -> (pandas.DataFrame):
+            Transform the data.
+        load (data: pandas.DataFrame, data_file_path: str): Load the
+            transformed data.
+        run (**kwargs: Any):
     """
     def __init__(self, extract_dir, load_dir):
         self.extract_dir = extract_dir
         self.load_dir = load_dir
 
     def extract(self, data_file_path, **kwargs):
-        """Read in the parquet file"""
+        """
+        A wrapper for pandas.read_parquet.
+
+        Parameters
+        ----------
+        data_file_path: (str)
+            The file to read in.
+        **kwargs: Any
+            Additional keyword arguments passed to `pandas.read_parquet`
+            For example:
+                - engine (str): Parquet library to use
+                    ('auto', 'pyarrow', 'fastparquet').
+                - columns (list[str], optional): List of columns to read
+                    from the file.
+                - storage_options (dict, optional): Extra options for remote
+                    file systems.
+        """
         result = pd.read_parquet(data_file_path, **kwargs)
         return result
 
     @abstractmethod
     def transform(self, data):
         """
-        Abstract method to transform the data to data_file_path.
+        Abstract method to transform the data.
+
+        Parameters
+        ----------
+        data: (pandas.DataFrame)
+            The data to transform.
         """
 
     def load(self, data, data_file_path):
-        """Write the transformed data to the load_dir."""
+        """
+        A wrapper for pandas.DataFrame.to_parquet
+
+        Parameters
+        ----------
+        data: (pandas.DataFrame)
+            The data to load.
+        data_file_path: (str)
+            The path to load the dataframe.
+        """
         data.to_parquet(data_file_path)
 
     def run(self, **kwargs):
         """
         Default method to run the task.
         Subclasses may override this method.
+
+        Parameters
+        ----------
+        **kwargs: Any
+            Optional keyword arguments.
+            Supported options:
+                iterables (list of iterables): A list of iterables to compute
+                the Cartesian product. Each tuple in the product represents a
+                unique combination of values to iterate over.
         """
         iterables = kwargs.get("iterables", [])
 
@@ -55,7 +103,10 @@ class ETLTask(ABC):
             extract_file_path = self.get_extract_file_path(*keys)
 
             try:
-                data = self.extract(extract_file_path, **kwargs["extract"])
+                data = self.extract(
+                    extract_file_path,
+                    **kwargs.get("extract", {})
+                )
             except FileNotFoundError:
                 print(f"File not found: {extract_file_path}. Skipping.")
                 continue
