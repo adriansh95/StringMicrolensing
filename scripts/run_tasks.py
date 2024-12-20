@@ -6,6 +6,7 @@ from utils.tasks.summary_table_task import SummaryTableTask
 from utils.tasks.efficiency_task import EfficiencyTask
 from utils.tasks.analyze_backgrounds_task import AnalyzeBackgroundsTask 
 from utils.tasks.bin_objects_task import BinObjectsTask
+from utils.tasks.event_rate_task import EventRateTask
 
 if __name__ == "__main__":
     coordinator = TaskCoordinator()
@@ -16,6 +17,7 @@ if __name__ == "__main__":
     coordinator.register_task("Efficiency", EfficiencyTask)
     coordinator.register_task("AnalyzeBackgrounds", AnalyzeBackgroundsTask)
     coordinator.register_task("BinObjects", BinObjectsTask)
+    coordinator.register_task("EventRate", EventRateTask)
 
     # Parse arguments
     parser = argparse.ArgumentParser(description="Run ETL tasks.")
