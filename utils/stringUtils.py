@@ -228,7 +228,10 @@ class EventCalculator():
     def computeLensingTimePDF(self, stringTheta=np.pi/4, bins=1000):
         enhancementFactors = self.results["enhancementFactor"]
         distances = np.linalg.norm(self.results["lineOfSight"], axis=0)
-        lensingTimes = self.computeLensingTimeSamples(distances, stringTheta=stringTheta).to(u.s)
+        lensingTimes = (self.computeLensingTimeSamples(
+            distances,
+            stringTheta=stringTheta).to(u.s).value
+        )
 
         if isinstance(bins, int):
             lensingTimePDF = np.zeros((len(enhancementFactors), bins))
@@ -238,18 +241,21 @@ class EventCalculator():
             lensingTimeBins = np.zeros((len(enhancementFactors), len(bins)))
 
         for i in range(len(lensingTimePDF)):
-            lensingTimePDF[i], lensingTimeBins[i] = np.histogram(lensingTimes[i],
-                                                                 weights=enhancementFactors[i],
-                                                                 bins=bins)
+            lensingTimePDF[i], lensingTimeBins[i] = np.histogram(
+                lensingTimes[i],
+                weights=enhancementFactors[i],
+                bins=bins,
+                density=True
+            )
 
         lensingTimeBins *= u.s
-        lensingTimePDF /= lensingTimePDF.sum(axis=1).reshape(len(enhancementFactors), 1)
 
         return lensingTimePDF, lensingTimeBins
 
     def computeLensingTimeCDF(self, stringTheta=np.pi/4, bins=1000):
         lensingTimePDF, lensingTimeBins = self.computeLensingTimePDF(stringTheta=stringTheta, bins=bins)
-        lensingTimeCDF = np.cumsum(lensingTimePDF, axis=1)
+        lensingTimeBinWidths = (lensingTimeBins[:, 1:] - lensingTimeBins[:, :-1])
+        lensingTimeCDF = np.cumsum(lensingTimePDF * lensingTimeBinWidths , axis=1)
 
         return lensingTimeCDF, lensingTimeBins
 
@@ -281,16 +287,19 @@ class ExperimentExpectationsCalculator():
         visitTime = self.exposureTime + self.readoutTime
         delta = self.detectionThreshold
 
-        lensingTimesPDF, lensingTimeBins = self.eventCalculator.computeLensingTimePDF(stringTheta=stringTheta,
-                                                                                     bins=bins)
+        lensingTimesPDF, lensingTimeBins = self.eventCalculator.computeLensingTimePDF(
+            stringTheta=stringTheta,
+            bins=bins
+        )
         lensingTimeBinMiddles = (lensingTimeBins[:, 1:] + lensingTimeBins[:, :-1]) / 2
+        lensingTimeBinWidths = (lensingTimeBins[:, 1:] - lensingTimeBins[:, :-1])
 
         #(tensions, nLensingTimes)
         observableWindowDuration = experimentDuration + lensingTimeBinMiddles
 
         #(tensions, nLensingTimes) nEvents of duration t expected
         lam = (self.eventCalculator.results["eventRates"].reshape(len(self.eventCalculator.tensions), 1)
-               * observableWindowDuration * lensingTimesPDF).decompose()
+               * observableWindowDuration * lensingTimesPDF * lensingTimeBinWidths).decompose()
 
         # (tensions, nLensingTimes) P(event of duration t overlaps with survey | event of duration t)
         observableEventProbabilities = 1 - np.exp(-lam.sum(axis=1))
@@ -313,7 +322,7 @@ class ExperimentExpectationsCalculator():
         # (tensions, nTimes) P(miss event of duration t | event of duration t)
         failAllObservationsProbabilities = np.prod(failObservationJthExposureProbabilities, axis=0)
         efficiencies = 1 - np.sum(failAllObservationsProbabilities *
-                                  lensingTimesPDF, axis=1)
+                                  lensingTimesPDF * lensingTimeBinWidths, axis=1)
 
         detectionProbabilities = observableEventProbabilities * efficiencies
         nStarsRequired = np.log(self.nullDetectionProbability) / np.log(1 - detectionProbabilities)
