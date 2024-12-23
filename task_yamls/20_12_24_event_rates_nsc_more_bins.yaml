@@ -1,0 +1,6 @@
+tasks:
+  - name: EventRate 
+    arguments:
+      init_args:
+        - /Volumes/THESIS_DATA/results/bin_objects/
+        - /Volumes/THESIS_DATA/results/event_rates/nsc/times/more_bins_2/
