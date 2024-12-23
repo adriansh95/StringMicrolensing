@@ -8,7 +8,6 @@ import pandas as pd
 from astropy.coordinates import SkyCoord
 from utils.tasks.etl_task import ETLTask
 from utils.stringUtils import EventCalculator
-from config.efficiency_config import tau_bins
 
 class EventRateTask(ETLTask):
     """
@@ -31,6 +30,7 @@ class EventRateTask(ETLTask):
         source_distance: (astropy.units.Quantity):
             distance at which to place the sources.
         """
+        bins = np.geomspace(1e-4, 1e4, num=501)
         event_calculator_config = {
             "curlyG": 1e4,
             "hostGalaxySkyCoordinates": [
@@ -42,7 +42,7 @@ class EventRateTask(ETLTask):
         }
         result_data = np.zeros(
             (
-                tau_bins.shape[0] - 1,
+                bins.shape[0] - 1,
                 event_calculator_config["tensions"].shape[0]
             )
         )
@@ -57,7 +57,7 @@ class EventRateTask(ETLTask):
             time_cdf, time_bins = event_calculator.computeLensingTimeCDF(bins=100)
             time_bins = time_bins.to(u.day).value
             time_cdf_interp = [
-                self.interpolate_cdf(tau_bins, tb[1:], tcdf) 
+                self.interpolate_cdf(bins, tb[1:], tcdf)
                 for tb, tcdf in zip(time_bins, time_cdf)
             ]
             time_cdf_interp = np.array(time_cdf_interp)
