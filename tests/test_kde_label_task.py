@@ -1,33 +1,31 @@
-import unittest
 import os
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
+from tests.base_etl_task_test import BaseETLTaskTest
 from utils.tasks.kde_label_task import KDELabelTask
 
 class TestKDELabelTask(unittest.TestCase):
     def setUp(self):
-        # Set up paths for test data and output directories
-        self.extract_dir = 'tests/test_extract/'
-        self.load_dir = 'tests/test_load/'
-        test_extract_file0 = os.path.join(self.extract_dir,
-                                       'lightcurves_batch0.parquet')
-        test_extract_file1 = os.path.join(self.extract_dir,
-                                       'lightcurves_batch1.parquet')
-        self.test_extract_files = [test_extract_file0, test_extract_file1]
-        test_load_file0 = os.path.join(
-            self.load_dir,
-            "kde_labelled_lightcurves_batch0.parquet"
-            )
-        test_load_file1 = os.path.join(
-            self.load_dir,
-            "kde_labelled_lightcurves_batch1.parquet"
-            )
-        self.test_load_files = [test_load_file0, test_load_file1]
+        super().setUp()
+        self.task = KDELabelTask(self.extract_dir, self.load_dir)
 
+    def get_extract_file_path(self, i_batch):
+        result = os.path.join(
+            self.extract_dir,
+            f"kde_labelled_lightcurves_batch{i_batch}.parquet"
+        )
+        return result
+
+    def get_load_file_path(self, i_batch):
+        result = os.path.join(
+            self.load_dir,
+            f"background_results_batch{i_batch}.parquet"
+        )
+        return result
+
+    def get_extract_data(self):
         rng = np.random.default_rng(seed=999)
-
-        # Sample data to write to tests/test_extract
         data = {
             "objectid": ["000"] * 20,
             "filter": ['u', 'g', 'r', 'i'] * 4 + ['u', 'g', 'r', 'z'],
@@ -37,43 +35,28 @@ class TestKDELabelTask(unittest.TestCase):
             "mjd_mid": [1.0005] * 20,
             "exptime": [86.4] * 20,
         }
-        df = pd.DataFrame(data=data)
+        result = pd.DataFrame(data=data)
+        return result
+
+    def get_expected_data(self):
+        result = self.get_extract_data().iloc[:-1]
         bandwidths = ["variable", 0.13]
         col_names = [f"bandwidth_{bw}" for bw in bandwidths]
-        expected = df.copy().iloc[:-1]
-        expected[col_names] = 1
-        self.extract_data = df
-        self.expected = expected
-        self.task = KDELabelTask(self.extract_dir, self.load_dir)
-
-        for f in self.test_extract_files:
-            df.to_parquet(f)
+        result[col_names] = 1
+        return result
 
     def test_transform(self):
         assert_frame_equal(
-            self.expected,
+            self.get_expected_data(),
             self.task.transform(self.extract_data)
             )
-
-    def test_get_load_file_path(self):
-        for i, f in enumerate(self.test_load_files):
-            self.assertEqual(f, self.task.get_load_file_path(i))
-
-    def test_get_extract_file_path(self):
-        for i, f in enumerate(self.test_extract_files):
-            self.assertEqual(f, self.task.get_extract_file_path(i))
 
     def test_run(self, batch_range=(0, 1)):
         self.task.run(batch_range=batch_range)
 
-        for f in self.test_load_files:
-            assert_frame_equal(
-                self.expected,
-                pd.read_parquet(f)
+        for i, f in enumerate(self.test_load_files):
+            with self.subTest(test_number=i):
+                assert_frame_equal(
+                    self.get_expected_data(i),
+                    pd.read_parquet(f)
                 )
-
-    def tearDown(self):
-        # Clean up test files
-        for f in self.test_extract_files + self.test_load_files:
-            if os.path.exists(f):
-                os.remove(f)
