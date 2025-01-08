@@ -99,7 +99,7 @@ class EventCalculator():
         # invoking np.where so the enhancement is never less than homogeneous limit (ie 1)
         self.results["enhancementFactor"] = np.where(tempF > 1, tempF, 1)
 
-    def calculate(self, nSteps=10000):
+    def calculate(self, nSteps=100000):
         mu13 = self.tensions * 1e13
         xIntegral = 4/3
         f02 = self._f02
@@ -209,21 +209,27 @@ class EventCalculator():
     def computeMaximumLensingTimes(self, stringTheta=np.pi/4):
         sourceDistance = self.computeSourceDistance()
         deficitAngles = 8 * np.pi * self.tensions
-        return (sourceDistance * deficitAngles * np.sin(stringTheta) / (4 * self._internalMotionRMS)).decompose()
+        result = (
+            sourceDistance * deficitAngles * np.sin(stringTheta) /
+            (4 * self._internalMotionRMS)
+            ).decompose()
+        return result
 
     def computeLensingTimeSamples(self, distanceSamples, stringTheta=np.pi/4):
         sourceDistance = self.computeSourceDistance()
-        deficitAngles = 8 * np.pi * self.tensions.reshape(len(self.tensions), 1)
-        timeSamples = (deficitAngles * np.sin(stringTheta) * distanceSamples
-                       * (1 - (distanceSamples / sourceDistance)) / self._internalMotionRMS).decompose()
-        return timeSamples
+        deficitAngles = 8 * np.pi * self.tensions.reshape((-1, 1))
+        result = (
+            deficitAngles * np.sin(stringTheta) * distanceSamples *
+            (1 - (distanceSamples / sourceDistance)) /
+            self._internalMotionRMS
+        ).decompose()
+        return result
 
     def computeDistancePDF(self):
         enhancementFactor = self.results["enhancementFactor"]
         norm = enhancementFactor.sum(axis=1).reshape((enhancementFactor.shape[0], 1))
-        pdf = enhancementFactor / norm
-
-        return pdf
+        result = enhancementFactor / norm
+        return result
 
     def computeLensingTimePDF(self, stringTheta=np.pi/4, bins=1000):
         enhancementFactors = self.results["enhancementFactor"]
@@ -244,20 +250,26 @@ class EventCalculator():
             lensingTimePDF[i], lensingTimeBins[i] = np.histogram(
                 lensingTimes[i],
                 weights=enhancementFactors[i],
-                bins=bins,
-                density=True
+                bins=bins
             )
 
         lensingTimeBins *= u.s
-
-        return lensingTimePDF, lensingTimeBins
+        lensingTimePDF /= (
+            enhancementFactors.sum(axis=1).reshape((-1, 1)) *
+            np.diff(lensingTimeBins, axis=1).value
+        )
+        result = (lensingTimePDF / lensingTimeBins.unit, lensingTimeBins)
+        return result
 
     def computeLensingTimeCDF(self, stringTheta=np.pi/4, bins=1000):
         lensingTimePDF, lensingTimeBins = self.computeLensingTimePDF(stringTheta=stringTheta, bins=bins)
-        lensingTimeBinWidths = (lensingTimeBins[:, 1:] - lensingTimeBins[:, :-1])
-        lensingTimeCDF = np.cumsum(lensingTimePDF * lensingTimeBinWidths , axis=1)
-
-        return lensingTimeCDF, lensingTimeBins
+        lensingTimeBinWidths = np.diff(lensingTimeBins, axis=1)
+        lensingTimeCDF = np.cumsum(
+            (lensingTimePDF * lensingTimeBinWidths).decompose(),
+            axis=1
+        )
+        result = (lensingTimeCDF, lensingTimeBins)
+        return result
 
 
 class ExperimentExpectationsCalculator():
