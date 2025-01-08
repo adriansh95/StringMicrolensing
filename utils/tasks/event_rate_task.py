@@ -6,6 +6,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
+from config.efficiency_config import tau_bins
 from utils.tasks.etl_task import ETLTask
 from utils.stringUtils import EventCalculator
 
@@ -30,7 +31,7 @@ class EventRateTask(ETLTask):
         source_distance: (astropy.units.Quantity):
             distance at which to place the sources.
         """
-        bins = np.geomspace(1e-4, 1e4, num=501)
+        bins = tau_bins * 86400
         event_calculator_config = {
             "curlyG": 1e4,
             "hostGalaxySkyCoordinates": [
@@ -54,31 +55,16 @@ class EventRateTask(ETLTask):
             ]
             event_calculator = EventCalculator(event_calculator_config)
             event_calculator.calculate()
-            time_cdf, time_bins = event_calculator.computeLensingTimeCDF(bins=100)
-            time_bins = time_bins.to(u.day).value
-            time_cdf_interp = [
-                self.interpolate_cdf(bins, tb[1:], tcdf)
-                for tb, tcdf in zip(time_bins, time_cdf)
-            ]
-            time_cdf_interp = np.array(time_cdf_interp)
-            time_pdf_interp = np.diff(time_cdf_interp, axis=1)
+            time_pdf, _ = event_calculator.computeLensingTimePDF(bins=bins)
             result_data += (
-                time_pdf_interp.transpose() * row.count * (
+                time_pdf.transpose() * row.count * (
                     event_calculator
                     .results["eventRates"]
-                    .to(1 / u.day)
-                    .value
                 )
-            )
+            ).to(1 / u.day**2).value
 
         result_column_names = [f"mu_{i}" for i in range(-15, -7)]
         result = pd.DataFrame(data=result_data, columns=result_column_names)
-        return result
-
-    @staticmethod
-    def interpolate_cdf(xi, x, y):
-        result = np.interp(xi, x, y)
-        result[xi < x[0]] *= xi[xi < x[0]] / x[0]
         return result
 
     def get_extract_file_path(self, *args):
