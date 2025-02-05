@@ -1,23 +1,24 @@
 import argparse
 import yaml
+import utils.tasks
 from utils.task_coordinator import TaskCoordinator
-from utils.tasks.kde_label_task import KDELabelTask
-from utils.tasks.summary_table_task import SummaryTableTask
-from utils.tasks.efficiency_task import EfficiencyTask
-from utils.tasks.analyze_backgrounds_task import AnalyzeBackgroundsTask 
-from utils.tasks.bin_objects_task import BinObjectsTask
-from utils.tasks.event_rate_task import EventRateTask
+
+def register_all_tasks(task_coordinator):
+    """
+    Dynamically imports and registers all tasks listed in `__all__` from utils.tasks.
+    """
+    for task_name in utils.tasks.__all__:
+        # Dynamically import the task class from utils.tasks
+        task_class = getattr(utils.tasks, task_name)
+
+        # Register the task with the coordinator
+        task_coordinator.register_task(task_name.replace("Task", ""), task_class)
 
 if __name__ == "__main__":
     coordinator = TaskCoordinator()
 
     # Register tasks
-    coordinator.register_task("KDELabel", KDELabelTask)
-    coordinator.register_task("SummaryTable", SummaryTableTask)
-    coordinator.register_task("Efficiency", EfficiencyTask)
-    coordinator.register_task("AnalyzeBackgrounds", AnalyzeBackgroundsTask)
-    coordinator.register_task("BinObjects", BinObjectsTask)
-    coordinator.register_task("EventRate", EventRateTask)
+    register_all_tasks(coordinator)
 
     # Parse arguments
     parser = argparse.ArgumentParser(description="Run ETL tasks.")
@@ -27,7 +28,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load the YAML configuration file
-    with open(args.config, "r") as file:
+    with open(args.config, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
     # Extract tasks from the configuration
