@@ -9,16 +9,13 @@ from astropy.coordinates import SkyCoord
 from config.efficiency_config import tau_bins
 from utils.tasks.etl_task import ETLTask
 from utils.stringUtils import EventCalculator
+from tqdm import tqdm
 
 class EventRateTask(ETLTask):
     """
     EventRateTask takes a dataframe of (n_objects, ra, dec) and calculates
     the string microlensing event rate at each (ra, dec) and weights by
     n_objects.
-
-    Attributes:
-
-    Methods:
     """
     def transform(self, data, source_distance):
         """
@@ -26,10 +23,15 @@ class EventRateTask(ETLTask):
 
         Parameters:
         ----------
-        data: (pandas.DataFrame)
+        data : pandas.DataFrame
             The data to transform.
-        source_distance: (astropy.units.Quantity):
-            distance at which to place the sources.
+        source_distance : astropy.units.Quantity
+            Distance at which to place the sources.
+
+        Returns:
+        ----------
+        transformed_data : pandas.DataFrame
+            The transformed data.
         """
         bins = tau_bins * 86400
         event_calculator_config = {
@@ -48,7 +50,7 @@ class EventRateTask(ETLTask):
             )
         )
 
-        for row in data.itertuples(index=False):
+        for row in tqdm(data.itertuples(index=False)):
             event_calculator_config["sourceSkyCoordinates"] = [
                 source_distance * u.kpc,
                 SkyCoord(ra=row.ra, dec=row.dec, unit="deg", frame="icrs")
@@ -76,6 +78,11 @@ class EventRateTask(ETLTask):
         Args:
         *args: Positional arguments. These are not used by this method but are
             required to maintain compatibility with the base class interface.
+
+        Returns:
+        ----------
+        extract_file_path : str
+            The path to the extract file.
         """
         result = os.path.join(
             self.extract_dir,
@@ -92,8 +99,9 @@ class EventRateTask(ETLTask):
         kwargs: dict
             Keyword arguments for configuring the task. This method expects the 
             following key(s):
-                source_distances: (list of ints or floats, default: [42, 50, 58]):
+                source_distances : array-like:
                     Distance (in kpc) at which to place the sources.
+                    Default: [42, 50, 58].
         """
         source_distances = kwargs.get("source_distances", [42, 50, 58])
         kwargs["iterables"] = [source_distances]
@@ -105,6 +113,13 @@ class EventRateTask(ETLTask):
 
         Parameters:
         ----------
+        source_distance (astropy.units.Quantity):
+            Distance at which to place the sources.
+
+        Returns:
+        ----------
+        load_file_path : str
+            The path to the load file.
         """
         result = os.path.join(
             self.load_dir,
