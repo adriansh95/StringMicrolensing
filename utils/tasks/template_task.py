@@ -11,8 +11,18 @@ class TemplateTask(ETLTask):
     Template task defining methods.
 
     Attributes:
+        extract_dir (str): Directory containing the input data files to be 
+                           processed.
+        load_dir (str): Directory where the transformed data files will be 
+                        written.
 
     Methods:
+        get_extract_file_path(*keys):
+            Returns the file_path to process given the keys.
+        get_load_file_path(*keys):
+            Returns the file_path to load given the keys.
+        transform(data, *keys):
+            Transform the data.
     """
     def transform(self, data):
         """
@@ -20,6 +30,8 @@ class TemplateTask(ETLTask):
 
         Parameters:
         ----------
+        data: `pandas.DataFrame`
+            The data to transform.
         """
 
     def get_extract_file_path(self):
