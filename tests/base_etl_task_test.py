@@ -1,5 +1,6 @@
 import os
 import unittest
+from itertools import product
 
 class BaseETLTaskTest(unittest.TestCase):
     def setUp(self):
@@ -10,13 +11,13 @@ class BaseETLTaskTest(unittest.TestCase):
         """
         self.extract_dir = 'tests/test_extract/'
         self.load_dir = 'tests/test_load/'
+        iterables = getattr(self, "iterables", [[0, 1]])
+        self.iter_product = list(product(*iterables))
         self.test_extract_files = [
-            self.get_extract_file_path(0),
-            self.get_extract_file_path(1)
+            self.get_extract_file_path(*k) for k in self.iter_product
         ]
         self.test_load_files = [
-            self.get_load_file_path(0),
-            self.get_load_file_path(1)
+            self.get_load_file_path(*k) for k in self.iter_product
         ]
         self.extract_data = self.get_extract_data()
 
@@ -28,7 +29,7 @@ class BaseETLTaskTest(unittest.TestCase):
             if os.path.exists(f):
                 os.remove(f)
 
-    def get_extract_file_path(self, key):
+    def get_extract_file_path(self, *keys):
         """
         Abstract method for getting extract file path.
         Subclasses must override this method.
@@ -37,7 +38,7 @@ class BaseETLTaskTest(unittest.TestCase):
             "Subclasses must implement get_extract_file_path"
         )
 
-    def get_load_file_path(self, key):
+    def get_load_file_path(self, *keys):
         """
         Abstract method for getting load file path.
         Subclasses must override this method.
