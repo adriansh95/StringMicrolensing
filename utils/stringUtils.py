@@ -111,8 +111,11 @@ class EventCalculator():
         self._calculateEnhancementFactor()
 
         # Integrate F(r)dr
-        enhancementIntegral = integrate.trapz(self.results["enhancementFactor"],
-                                              axis=1, dx=self.results["rStepSize"])
+        enhancementIntegral = integrate.trapezoid(
+            self.results["enhancementFactor"],
+            axis=1,
+            dx=self.results["rStepSize"]
+        )
         eventRates = (0.2 * lg * self._speedOfLight * self.curlyG * 1.15e-6 * xIntegral
                      * (f02 * np.sqrt(a01) / (gamma50 * mu13)**(3/2)) *
                      enhancementIntegral * u.kpc**(-3))
