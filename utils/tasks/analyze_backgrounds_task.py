@@ -60,8 +60,8 @@ class AnalyzeBackgroundsTask(ETLTask):
             filtered_data = data.groupby(by="objectid").filter(
                 not_unstable_fil
             )
-            filtered_data = (filtered_data.groupby(by="objectid")
-                .filter(lens_fil)
+            filtered_data = (
+                filtered_data.groupby(by="objectid").filter(lens_fil)
             )
             transformed_data = make_lensing_dataframe(
                 filtered_data,
@@ -91,7 +91,7 @@ class AnalyzeBackgroundsTask(ETLTask):
 
         Parameters:
         ----------
-        kwargs : dict
+        kwargs: dict
             Keyword arguments for configuring the task. This method expects the 
             following key(s):
 
@@ -102,9 +102,7 @@ class AnalyzeBackgroundsTask(ETLTask):
         """
 
         batch_range = kwargs.get("batch_range", (0, 66))
-        first_batch = batch_range[0]
-        last_batch = batch_range[1]
-        batch_array = np.arange(first_batch, last_batch+1)
+        batch_array = np.arange(batch_range[0], batch_range[1]+1)
         kwargs["iterables"] = [batch_array]
         kwargs["extract"] = {
             "columns": [
