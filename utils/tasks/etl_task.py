@@ -27,6 +27,7 @@ class ETLTask(ABC):
         load (data: pandas.DataFrame, data_file_path: str): Load the
             transformed data.
         run (**kwargs: Any):
+            Run the task.
     """
     def __init__(self, extract_dir, load_dir):
         self.extract_dir = extract_dir
@@ -112,9 +113,17 @@ class ETLTask(ABC):
                 continue
 
             # Transform and Load
-            transformed_data = self.transform(data, *keys)
+            transformed_data = self.transform(
+                data,
+                *keys,
+                **kwargs.get("transform", {})
+            )
             load_file_path = self.get_load_file_path(*keys)
-            self.load(transformed_data, load_file_path)
+
+            if not transformed_data.empty:
+                self.load(transformed_data, load_file_path)
+            else:
+                print(f"No data for {load_file_path}. Skipping.")
 
     @abstractmethod
     def get_extract_file_path(self):
