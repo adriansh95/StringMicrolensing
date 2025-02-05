@@ -100,6 +100,8 @@ class LcScanner():
                 np.nan
             )
 
+        d = np.diff(result, axis=0)
+        assert((d[np.isfinite(d)] > 0).all())
         result.sort(axis=0)
         result = result[(np.isfinite(result)).any(axis=1)]
         return result
@@ -149,8 +151,8 @@ class LcScanner():
         result_shape = self.state.filter.n_bright.shape
         result = self._numba_n_bright(
             result_shape,
-            filter_idx, 
-            start_idx, 
+            filter_idx,
+            start_idx,
             end_idx
         )
         return result
@@ -159,7 +161,7 @@ class LcScanner():
     @njit
     def _numba_n_bright(shape, filter_idx, start_idx, end_idx):
         result = np.zeros(shape)
-        
+
         for i in range(shape[0]):
             sti = start_idx[i]
             endi = end_idx[i]
