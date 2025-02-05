@@ -7,7 +7,7 @@ import pandas as pd
 from .helpers import get_bounding_idxs
 
 def make_lensing_dataframe(
-        df, 
+        df,
         time_column="mjd",
         exp_time_column="exptime",
         label_column="cluster_label"):
@@ -93,10 +93,12 @@ def _lens_apply(df):
         for f in ['u', 'g', 'r', 'i', 'z', 'Y']
     }
     count_data["n_samples"] = [(idx[1] - idx[0]) - 1 for idx in bounding_idxs]
-    t_data = {"t_start_max": t_start_max,
-            "t_end_max": t_end_max, 
-            "t_start_min": t_start_min, 
-            "t_end_min": t_end_min}
+    t_data = {
+        "t_start_max": t_start_max,
+        "t_end_max": t_end_max, 
+        "t_start_min": t_start_min, 
+        "t_end_min": t_end_min
+    }
     data = t_data | count_data
     result = pd.DataFrame(data=data)
     result.index.names = ["event_number"]
