@@ -7,16 +7,6 @@ from utils.kde_label import cluster_label_dataframe
 from utils.filtering import lightcurve_classifier
 from utils.helpers import get_bounding_idxs
 
-def t_start_df(filtered_df, n_samples):
-    rng = np.random.default_rng()
-    s = filtered_df.xs("start", level=2)
-    e = filtered_df.xs("end", level=2)
-    time_df = pd.concat([s, e], axis=1)
-    time_df.columns = ["start", "end"]
-    result = time_df.sample(n=n_samples)
-    result["t_start"] = rng.uniform(low=result["start"], high=result["end"])
-    return result
-
 def sample_good_windows(filtered_ddf):
     s = filtered_ddf.map_partitions(lambda x: x.xs("start", level=2),
                                     meta=(None, float))
