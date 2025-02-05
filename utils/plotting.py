@@ -1,6 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+TIMESCALES = {
+    "values_in_seconds": np.array(
+        [1, 60, 3600, 86400, 2592000, 31536000]
+    ),
+    "labels": ["1s", "1 min", "1 hr", "1 day", "1 mo", "1 yr"]
+}
+
 def plot_lightcurve(lightcurve_df, ax, **kwargs):
     colors = ["tab:blue", "tab:green", "tab:orange", "tab:red", "tab:brown", 'k']
     filters = ['u', 'g', 'r', 'i', 'z', 'Y']
