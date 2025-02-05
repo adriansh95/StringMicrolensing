@@ -5,6 +5,7 @@ batched lightcurves and computes some useful statistics
 class).
 """
 import os
+import glob
 import pandas as pd
 import numpy as np
 from utils.filtering import lightcurve_classifier
@@ -22,29 +23,40 @@ class SummaryTableTask(ETLTask):
     load_directory for each batch.
 
     Attributes:
-        extract_dir (str): Directory containing the input data files to be 
-                           processed.
-        load_dir (str): Directory where the transformed data files will be 
-                        written.
-        config_paths (dict): Dictionary containing key, value pairs 
-                             ("yaml_path", (str)) and ("python_path", (str))
-                             which point to the config yaml and python files.
+
+        extract_dir (str): 
+            Directory containing the input data files to be  processed.
+
+        load_dir (str): 
+            Directory where the transformed data files will be  written.
+
+        config_paths (dict): 
+            Dictionary containing key, value pairs  ("yaml_path", (str))
+            and ("python_path", (str)) which point to the config yaml 
+            and python files. Note: python_path not used.
     Methods:
+
         get_extract_file_path(i_batch):
             Returns the file_path to process given the batch number.
+
         get_load_file_path(i_batch):
             Returns the file_path to load given the batch number.
+
         extract(data_file_path):
             Reads data from a given input file and returns it as a DataFrame.
+
         transform(data):
             Computes the weighted std per band, rms error per band, and 
             lc_class for each source.
+
         load(data, data_file_path): 
             Writes the transformed DataFrame to the specified output directory.
+
         run(): 
             Executes the ETL process for each file, applying extract,
             transform, and load sequentially.
-        lc_class_dataframe: 
+
+        lc_class_dataframe(data): 
             Helper function for transform which computes the lightcurve
             class for different versions of the achromaticy requirement
             for both variable and fixed 130 mmag bandwidths.
@@ -116,6 +128,18 @@ class SummaryTableTask(ETLTask):
             axis=1
         )
         return result
+
+    def concat_results(self):
+        """
+        Concatenate the results from ETL into a single dataframe.
+        """
+        df_files = glob.glob(
+            f"{self.load_dir}summary_batch*.parquet"
+        )
+        dfs = [pd.read_parquet(f) for f in df_files]
+        result = pd.concat(dfs, axis=0)
+        result.sort_index(inplace=True)
+        result.to_parquet(f"{self.load_dir}summary_table.parquet")
 
     def run(self, **kwargs):
         """
