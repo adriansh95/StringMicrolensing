@@ -6,9 +6,9 @@ from numba import njit
 
 class _FilterState():
     def __init__(self, n_taus):
-        self.n_all = np.zeros(7, dtype=np.int32)
-        self.n_bright = np.zeros((n_taus, 7), dtype=np.int32)
-        self.n_baseline = np.zeros((n_taus, 7), dtype=np.int32)
+        self.n_all = np.zeros(7, dtype=int)
+        self.n_bright = np.zeros((n_taus, 7), dtype=int)
+        self.n_baseline = np.zeros((n_taus, 7), dtype=int)
 
     def update(self, n_bright):
         """update self"""
@@ -18,14 +18,14 @@ class _FilterState():
     def reset(self):
         """Reset self to initial values"""
         n_taus = self.n_bright.shape[0]
-        self.n_all = np.zeros(7, dtype=np.int32)
-        self.n_bright = np.zeros((n_taus, 7), dtype=np.int32)
-        self.n_baseline = np.zeros((n_taus, 7), dtype=np.int32)
+        self.n_all = np.zeros(7, dtype=int)
+        self.n_bright = np.zeros((n_taus, 7), dtype=int)
+        self.n_baseline = np.zeros((n_taus, 7), dtype=int)
 
 class _TimeState():
     def __init__(self, n_taus):
-        self.start_idx = np.zeros(n_taus, dtype=np.int32)
-        self.end_idx = np.zeros(n_taus, dtype=np.int32)
+        self.start_idx = np.zeros(n_taus, dtype=int)
+        self.end_idx = np.zeros(n_taus, dtype=int)
         self.t_start = np.zeros(n_taus)
 
     def update(self, start_idx, end_idx, t_start):
@@ -37,8 +37,8 @@ class _TimeState():
     def reset(self):
         """Reset self to initial values"""
         n_taus = self.t_start.shape[0]
-        self.start_idx = np.zeros(n_taus, dtype=np.int32)
-        self.end_idx = np.zeros(n_taus, dtype=np.int32)
+        self.start_idx = np.zeros(n_taus, dtype=int)
+        self.end_idx = np.zeros(n_taus, dtype=int)
         self.t_start = np.zeros(n_taus)
 
 class _LcScannerState():
@@ -57,21 +57,27 @@ class _LcScannerState():
 
 class LcScanner():
     """This class includes the record_windows method and its helpers"""
-    def __init__(self, taus, n_filters_req=2, min_per_filter=1):
-        n_taus = len(taus)
-        self.n_taus = n_taus
+    def __init__(
+        self,
+        taus,
+        n_filters_req=2,
+        min_per_filter=1,
+        bound_both_sides=False
+    ):
         self.taus = taus
         self.n_samples = 0
         self.n_filters_req = n_filters_req
         self.min_per_filter = min_per_filter
-        self.state = _LcScannerState(n_taus)
+        self.state = _LcScannerState(taus.shape[0])
+        self.bound_both_sides = bound_both_sides
+        self.bounding_indices = (0, -1)
 
     def update(self, start_idx, end_idx, t_start, n_bright):
         """Update the scanner's state"""
         self.state.time.update(start_idx, end_idx, t_start)
         self.state.filter.update(n_bright)
         self.state.last_window_good = self.state.this_window_good
-        self.state.this_window_good = self._is_good_window()
+        self.state.this_window_good = self._good_window()
 
     def record_windows(self, dataframe):
         """This method is used to scan a lightcurve and find time windows
@@ -86,7 +92,7 @@ class LcScanner():
 
     def _record_windows(self, times, filter_idx):
         self._setup(times, filter_idx)
-        result = np.full((self.n_samples * 2, self.n_taus), np.nan)
+        result = np.full((self.n_samples * 2, self.taus.shape[0]), np.nan)
 
         #shift, record, repeat
         for i in range(self.n_samples * 2):
@@ -147,6 +153,11 @@ class LcScanner():
         self.n_samples = n_samples
         self.state.filter.n_all += np.bincount(filter_idx, minlength=7)
 
+        if self.bound_both_sides:
+            self.bounding_indices = (0, n_samples)
+        else:
+            self.bounding_indices = (-1, n_samples+1)
+
     def _compute_n_bright(self, filter_idx, start_idx, end_idx):
         result_shape = self.state.filter.n_bright.shape
         result = self._numba_n_bright(
@@ -170,21 +181,41 @@ class LcScanner():
 
         return result
 
-    def _is_good_window(self):
+    def _good_window(self):
         n_bright = self.state.filter.n_bright
         n_baseline = self.state.filter.n_baseline
-        result = self._numba_good_window(
+        achromatic = self._numba_achromatic(
             n_bright,
             n_baseline,
             self.n_filters_req,
             self.min_per_filter,
-            self.n_taus
+            self.taus.shape[0]
         )
+        bounded = self._numba_bounded(
+            self.state.time.start_idx,
+            self.state.time.end_idx,
+            self.bounding_indices[0],
+            self.bounding_indices[1]
+        )
+        result = achromatic & bounded
         return result
 
     @staticmethod
     @njit
-    def _numba_good_window(
+    def _numba_bounded(
+        start_idx,
+        end_idx,
+        start_idx_bound,
+        end_idx_bound
+    ):
+        start_bounded = start_idx > start_idx_bound
+        end_bounded = end_idx < end_idx_bound
+        result = start_bounded & end_bounded
+        return result
+
+    @staticmethod
+    @njit
+    def _numba_achromatic(
         n_bright,
         n_baseline,
         n_filters_req,
