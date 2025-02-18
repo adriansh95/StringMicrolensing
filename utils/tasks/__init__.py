@@ -7,6 +7,10 @@ from utils.tasks.event_rate_task import EventRateTask
 from utils.tasks.effective_monitoring_time_task import (
     EffectiveMonitoringTimeTask
 )
+from utils.tasks.good_windows_task import GoodWindowsTask
+from utils.tasks.good_windows_by_duration_task import (
+    GoodWindowsByDurationTask
+)
 from utils.tasks.sample_good_windows_task import SampleGoodWindowsTask
 
 __all__ = [
@@ -17,5 +21,7 @@ __all__ = [
     "BinObjectsTask",
     "EventRateTask",
     "EffectiveMonitoringTimeTask",
+    "GoodWindowsTask",
+    "GoodWindowsByDurationTask",
     "SampleGoodWindowsTask"
 ]
