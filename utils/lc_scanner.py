@@ -83,7 +83,7 @@ class LcScanner():
         """This method is used to scan a lightcurve and find time windows
         during which a lensing event of duration tau could begin and
         would, in principle, be detectable"""
-        filter_idx = dataframe["filter_index"].values
+        filter_idx = dataframe["filter_index"].to_numpy()
         sample_times = (
             dataframe["mjd"] + (dataframe["exptime"] / (86400 * 2))
         ).to_numpy()
