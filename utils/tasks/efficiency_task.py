@@ -48,12 +48,7 @@ class EfficiencyTask(ETLTask):
 
     """
 
-    def __init__(
-            self,
-            extract_dir,
-            load_dir,
-            config_paths
-    ):
+    def __init__(self, extract_dir, load_dir, config_paths):
         super().__init__(extract_dir, load_dir)
         self.config = load_config(
             yaml_path=config_paths["yaml_path"]
@@ -101,9 +96,7 @@ class EfficiencyTask(ETLTask):
         """
         versions = kwargs.get("versions", list(self.config.keys()))
         tau_range = kwargs.get("tau_range", (0, 49))
-        first_tau = tau_range[0]
-        last_tau = tau_range[1]
-        tau_array = np.arange(first_tau, last_tau+1)
+        tau_array = np.arange(tau_range[0], tau_range[1]+1)
         bandwidth_types = ["fixed", "variable"]
         kwargs["iterables"] = [versions, tau_array, bandwidth_types]
         kwargs["extract"] = {
