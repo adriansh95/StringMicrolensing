@@ -51,6 +51,10 @@ class EffectiveMonitoringTimeMetric(maf.BaseMetric):
             "min_per_filter": kwargs.pop(
                 "min_per_filter",
                 scanner_defaults["min_per_filter"]
+            ),
+            "bound_both_sides": kwargs.pop(
+                "bounded",
+                scanner_defaults["bound_both_sides"]
             )
         }
         col = [filter_col, mjd_col, exp_time_col]
