@@ -35,11 +35,20 @@ class KDELabelTask(ETLTask):
 
     def transform(self, data, *args):
         """Clean the data and add the cluster labels"""
+        data.sort_values(by=["objectid", "mjd"], inplace=True)
+        g = data.groupby(by="objectid")
+
+        # Some sources have "simultaneous" measurements. Filter those out.
+        data = g.filter(
+            lambda x: (np.diff(x["mjd"].to_numpy()) > 0).all()
+        )
         bandwidths = ["variable", 0.13]
         col_names = [f"bandwidth_{bw}" for bw in bandwidths]
-        g = data.groupby(by=["objectid", "filter"],
-                         group_keys=False,
-                         sort=False)
+        g = data.groupby(
+            by=["objectid", "filter"],
+            group_keys=False,
+            sort=False
+        )
         result = g.filter(lambda x: len(x) > 2)
         cl_data = np.zeros((result.shape[0], len(bandwidths)), dtype=int)
         cl = "cluster_label"
@@ -53,14 +62,12 @@ class KDELabelTask(ETLTask):
     def run(self, **kwargs):
         """
         Run the task. It accepts the following keyword argument:
-            batch_range: (tuple, optional): A tuple specifying the range 
-                                            of batch indices to process. 
-                                            Defaults to (0, 66). The first
-                                            element specifies the starting
-                                            index (inclusive) and the second
-                                            specifies the last (inclusive).
+            batch_range : `tuple of (int, int)`
+                A tuple specifying the range of batch indices to process. 
+                Defaults to (0, 66). The first element specifies the starting
+                index (inclusive) and the second specifies the last (inclusive).
         """
-        batch_range = kwargs.get("batch_range", (0, 66))
+        batch_range = kwargs.pop("batch_range", (0, 66))
         first_batch = batch_range[0]
         last_batch = batch_range[1]
         batch_array = np.arange(first_batch, last_batch+1)
