@@ -3,6 +3,7 @@ This module defines ETLTask, the Base task defining methods and
 abstract methods which subclasses will inherit and must implement.
 """
 
+import os
 from itertools import product
 from abc import ABC, abstractmethod
 from tqdm import tqdm
@@ -120,7 +121,10 @@ class ETLTask(ABC):
             )
             load_file_path = self.get_load_file_path(*keys)
 
+
             if not transformed_data.empty:
+                # Make a load directory if one doesn't exist
+                os.makedirs(os.path.dirname(load_file_path), exist_ok=True)
                 self.load(transformed_data, load_file_path)
             else:
                 print(f"No data for {load_file_path}. Skipping.")
