@@ -14,7 +14,7 @@ FLUX_DOUBLE = -2.5 * np.log10(2)
 
 @njit
 def _weighted_std_err(weights):
-    """Computes weighted standard error of weighted mean"""
+    """Computes standard error of weighted mean"""
     result = np.sqrt(1 / weights.sum())
     return result
 
@@ -26,13 +26,13 @@ def unstable_filter(df, **kwargs):
 
 def lens_filter(df, **kwargs):
     """
-    kwargs and defaults are samples_per_filter=1
-    unique_filters=2, factor_of_two=True, mag_column='mag_auto',
+    kwargs and defaults are min_per_filter=2
+    n_filters_req=3, factor_of_two=True, mag_column='mag_auto',
     magerr_column='magerr_auto', label_column="cluster_label",
     mag_column and magerr_column are passed to _check_factor
     """
-    samples_per_filter = kwargs.get("samples_per_filter", 1)
-    unique_filters = kwargs.get("unique_filters", 2)
+    min_per_filter = kwargs.get("min_per_filter", 2)
+    n_filters_req = kwargs.get("n_filters_req", 3)
     check_factor_of_two = kwargs.get("factor_of_two", True)
     label_column= kwargs.get("label_column", "cluster_label")
     df = df.sort_values(by="mjd")
@@ -44,8 +44,8 @@ def lens_filter(df, **kwargs):
         achromatic = [
             _check_achromaticity(
                 df["filter"].iloc[pair[0]+1: pair[1]].to_numpy().flatten(),
-                unique_filters,
-                samples_per_filter
+                n_filters_req,
+                min_per_filter
             )
             for pair in lensed_idxs
         ]
@@ -92,7 +92,7 @@ def _factor_of_two(samples, weights, mask_bright, mask_baseline):
     mu1 = np.average(samples[mask_baseline], weights=weights[mask_baseline])
     sig1 = _weighted_std_err(weights[mask_baseline])
     mu_diff = mu1 - mu0
-    sig_diff = sig0 + sig1
+    sig_diff = np.sqrt(sig0**2 + sig1**2)
     lower_bound = -FLUX_DOUBLE - 5 * sig_diff
     upper_bound = -FLUX_DOUBLE + 5 * sig_diff
     within_bounds = lower_bound < mu_diff < upper_bound
@@ -100,10 +100,10 @@ def _factor_of_two(samples, weights, mask_bright, mask_baseline):
     result = np.logical_and(within_bounds, five_sigma)
     return result
 
-def _check_achromaticity(vals, unique_filters, samples_per_filter):
+def _check_achromaticity(vals, n_filters_req, min_per_filter):
     c = Counter(vals)
-    result = ((len(c.keys()) >= unique_filters) &
-              (np.array(list(c.values())) >= samples_per_filter).all())
+    result = ((len(c.keys()) >= n_filters_req) &
+              (np.array(list(c.values())) >= min_per_filter).all())
     return result
 
 def unimodal_filter(df, **kwargs):
