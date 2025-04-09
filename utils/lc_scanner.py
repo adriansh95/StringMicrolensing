@@ -60,9 +60,9 @@ class LcScanner():
     def __init__(
         self,
         taus,
-        n_filters_req=2,
-        min_per_filter=1,
-        bound_both_sides=False
+        n_filters_req=3,
+        min_per_filter=2,
+        bound_both_sides=True
     ):
         self.taus = taus
         self.n_samples = 0
