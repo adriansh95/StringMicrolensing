@@ -83,7 +83,7 @@ class TaskCoordinator:
 
             if task_name not in self.registry:
                 raise ValueError(f"Task '{task_name}' not found in registry.")
- 
+
             task_cls = self.registry[task_name]
             task_instance = task_cls(
                 *init_args,

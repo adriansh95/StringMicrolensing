@@ -5,14 +5,14 @@ import os
 from itertools import product
 import pandas as pd
 import numpy as np
-from utils.tasks.etl_task import ETLTask
-from utils.lc_scanner import LcScanner
-from utils.helpers import filter_map
+from microlensing.lc_scanner import LcScanner
+from microlensing.helpers import filter_map
+from pipeline.etl_task import ETLTask
 from config.config_loader import load_config
 
 class GoodWindowsTask(ETLTask):
     """
-    GoodWindowsTask uses utils.lc_scanner.LcScanner to scan 
+    GoodWindowsTask uses microlensing.lc_scanner.LcScanner to scan 
     lightcurves and record all the time intervals during 
     which a lensing event could start and lens a sufficient 
     subset of the samples.
@@ -47,7 +47,7 @@ class GoodWindowsTask(ETLTask):
         ----------
         data : `pandas.DataFrame`
             The data to transform.
-        scanner : `utils.lc_scanner.LcScanner`
+        scanner : `microlensing.lc_scanner.LcScanner`
 
         Returns:
         ----------
@@ -82,7 +82,7 @@ class GoodWindowsTask(ETLTask):
         kwargs : `dict`
             Keyword arguments. This method expects the 
             following keyword argument(s):
-                scanner : `utils.lc_scanner.LcScanner`
+                scanner : `microlensing.lc_scanner.LcScanner`
                 version : `str`
                     Which achromaticity version is being used.
 

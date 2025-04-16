@@ -8,9 +8,9 @@ import os
 import glob
 import pandas as pd
 import numpy as np
-from utils.filtering import lightcurve_classifier
-from utils.tasks.etl_task import ETLTask
-from utils.helpers import weighted_std
+from microlensing.filtering import lightcurve_classifier
+from microlensing.helpers import weighted_std
+from pipeline.etl_task import ETLTask
 from config.config_loader import load_config
 
 class SummaryTableTask(ETLTask):

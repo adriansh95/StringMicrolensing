@@ -4,7 +4,7 @@ This module defines GoodWindowsByDurationTask.
 import os
 import pandas as pd
 from tqdm import tqdm
-from utils.tasks.etl_task import ETLTask
+from pipeline.etl_task import ETLTask
 from config.config_loader import load_config
 
 class GoodWindowsByDurationTask(ETLTask):

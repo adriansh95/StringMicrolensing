@@ -3,8 +3,8 @@ This module contains the KDELabelTask class.
 """
 import os
 import numpy as np
-from utils.tasks.etl_task import ETLTask
-from utils.kde_label import cluster_label_dataframe
+from microlensing.kde_label import cluster_label_dataframe
+from pipeline.etl_task import ETLTask
 
 class KDELabelTask(ETLTask):
     """

@@ -5,7 +5,7 @@ import os
 import numpy as np
 import healpy as hp
 import pandas as pd
-from utils.tasks.etl_task import ETLTask
+from pipeline.etl_task import ETLTask
 
 class BinObjectsTask(ETLTask):
     """

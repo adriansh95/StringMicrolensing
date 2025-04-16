@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 from astropy.coordinates import SkyCoord
 from config.efficiency_config import tau_bins
-from utils.tasks.etl_task import ETLTask
-from utils.stringUtils import EventCalculator
+from microlensing.stringUtils import EventCalculator
+from pipeline.etl_task import ETLTask
 from tqdm import tqdm
 
 class EventRateTask(ETLTask):

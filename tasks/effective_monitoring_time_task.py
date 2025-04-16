@@ -2,10 +2,10 @@
 This module defines EffectiveMonitoringTimeTask.
 """
 import os
+import glob
 import numpy as np
 import pandas as pd
-import glob
-from utils.tasks.etl_task import ETLTask
+from pipeline.etl_task import ETLTask
 
 class EffectiveMonitoringTimeTask(ETLTask):
     """

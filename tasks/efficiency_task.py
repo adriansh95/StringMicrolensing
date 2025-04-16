@@ -7,9 +7,9 @@ import os
 import glob
 import pandas as pd
 import numpy as np
-from utils.filtering import lightcurve_classifier
-from utils.tasks.etl_task import ETLTask
-from utils.helpers import get_bounding_idxs
+from microlensing.filtering import lightcurve_classifier
+from microlensing.helpers import get_bounding_idxs
+from pipeline.etl_task import ETLTask
 from config.config_loader import load_config
 
 class EfficiencyTask(ETLTask):
@@ -100,7 +100,7 @@ class EfficiencyTask(ETLTask):
         bandwidth_types = ["fixed", "variable"]
         kwargs["iterables"] = [versions, tau_array, bandwidth_types]
         kwargs["extract"] = {
-            columns: [
+            "columns": [
                 "objectid",
                 "mag_auto",
                 "magerr_auto",

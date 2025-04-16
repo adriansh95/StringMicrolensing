@@ -4,7 +4,7 @@ This module defines SampleGoodWindowsTask.
 import os
 import numpy as np
 import pandas as pd
-from utils.tasks.etl_task import ETLTask
+from pipeline.etl_task import ETLTask
 
 class SampleGoodWindowsTask(ETLTask):
     """

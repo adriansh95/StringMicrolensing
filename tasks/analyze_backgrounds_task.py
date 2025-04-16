@@ -8,9 +8,9 @@ import os
 import glob
 import pandas as pd
 import numpy as np
-from utils.filtering import lens_filter, unstable_filter
-from utils.tasks.etl_task import ETLTask
-from utils.analyze_lensing import make_lensing_dataframe
+from microlensing.filtering import lens_filter, unstable_filter
+from microlensing.analyze_lensing import make_lensing_dataframe
+from pipeline.etl_task import ETLTask
 
 class AnalyzeBackgroundsTask(ETLTask):
     """
