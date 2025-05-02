@@ -48,8 +48,11 @@ def _subtract_baseline_apply(df, mag_column, magerr_column):
     weights_baseline = df.loc[mask_baseline, magerr_column].values**-2
     baseline = np.average(samples_baseline, weights=weights_baseline)
     baseline_err = np.sqrt(1 / weights_baseline.sum())
-    result = df.assign(delta_mag=df[mag_column] - baseline,
-                       delta_mag_err=df[magerr_column] + baseline_err)
+    delta_mag_err = np.sqrt(df[magerr_column]**2 + baseline_err**2)
+    result = df.assign(
+        delta_mag=df[mag_column] - baseline,
+        delta_mag_err=delta_mag_err
+    )
     return result
 
 def write_query(i_batch, batch_size, db):
