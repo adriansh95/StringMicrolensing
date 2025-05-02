@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from utils.filtering import unstable_filter
+from microlensing.filtering import unstable_filter
 from pandas.testing import assert_frame_equal
 
 class TestMakeLensingDataframe(unittest.TestCase):

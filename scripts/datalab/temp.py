@@ -8,12 +8,13 @@ from dl import queryClient as qc
 #"""
 
 q = """
-    SELECT id, ra, dec
+    SELECT COUNT(id)
     FROM nsc_dr2.object
-    WHERE q3c_radial_query(ra, dec, 80.8917, -69.757, 5.5)
+    WHERE q3c_radial_query(ra, dec, 80.8917, -69.757, 15)
     AND class_star > 0.9
 """
 
 df = qc.query(sql=q, fmt="pandas", timeout=600)
-df.to_parquet("/Volumes/THESIS_DATA/all_lmc_stars/all_stars.parquet")
+print(df)
+#df.to_parquet("/Volumes/THESIS_DATA/all_lmc_stars/all_stars.parquet")
 #print(df.sort_values(by="mjd"))

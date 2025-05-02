@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 from tests.base_etl_task_test import BaseETLTaskTest
-from utils.tasks.analyze_backgrounds_task import AnalyzeBackgroundsTask
+from tasks.analyze_backgrounds_task import AnalyzeBackgroundsTask
 
 class TestAnalyzeBackgroundsTask(BaseETLTaskTest):
     def setUp(self):
