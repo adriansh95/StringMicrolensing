@@ -10,7 +10,8 @@ def make_lensing_dataframe(
         df,
         time_column="mjd",
         exp_time_column="exptime",
-        label_column="cluster_label"):
+        label_column="cluster_label"
+    ):
     """This function assumes the dataframe has been filtered using lens_filter,
     and is intended for use only on lightcurves
     with bright sequences (ie, no lightcurves which show only baseline).
