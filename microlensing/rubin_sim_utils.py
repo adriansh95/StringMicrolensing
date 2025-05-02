@@ -6,7 +6,7 @@ EffectiveMonitoringTimeSummaryMetric.
 import inspect
 import numpy as np
 from rubin_sim import maf
-from utils.lc_scanner import LcScanner
+from microlensing.lc_scanner import LcScanner
 
 def filter_map(char):
     """
