@@ -23,9 +23,18 @@ def plot_lightcurve(lightcurve_df, ax, **kwargs):
         lc = lightcurve_df.loc[m_f]
         xerr = (lc[xerr_column] / 86400) / 2
 
-        ax.errorbar(lc[x_column] + xerr, lc[y_column], xerr=xerr,
-                    yerr=lc[yerr_column], marker='.', ms=8,
-                    capsize=5, color=c, ls="None", label=f)
+        ax.errorbar(
+            lc[x_column] + xerr,
+            lc[y_column],
+            xerr=xerr,
+            yerr=lc[yerr_column],
+            marker='.',
+            ms=8,
+            capsize=5,
+            color=c,
+            ls="None",
+            label=f
+        )
 
     ax.tick_params(labelsize=18)
     ax.invert_yaxis()
