@@ -80,23 +80,34 @@ def _check_factor(df, df_gb, idx_bounds, **kwargs):
         mask_baseline = (group[label_column] == 1).to_numpy()
         samples = group[mag_column].values
         weights = group[magerr_column].values**-2
-        results[i] = _factor_of_two(samples, weights, mask_bright, mask_baseline)
+        results[i] = _factor_of_two(
+            samples,
+            weights,
+            mask_bright,
+            mask_baseline
+        )
 
     result = results.all()
     return result
 
 @njit
 def _factor_of_two(samples, weights, mask_bright, mask_baseline):
-    mu0 = np.average(samples[mask_bright], weights=weights[mask_bright])
-    sig0 = _weighted_std_err(weights[mask_bright])
-    mu1 = np.average(samples[mask_baseline], weights=weights[mask_baseline])
-    sig1 = _weighted_std_err(weights[mask_baseline])
-    mu_diff = mu1 - mu0
-    sig_diff = np.sqrt(sig0**2 + sig1**2)
-    lower_bound = -FLUX_DOUBLE - 5 * sig_diff
-    upper_bound = -FLUX_DOUBLE + 5 * sig_diff
-    within_bounds = lower_bound < mu_diff < upper_bound
-    five_sigma = mu_diff / sig_diff > 5
+    mean_bright = np.average(
+        samples[mask_bright],
+        weights=weights[mask_bright]
+    )
+    std_err_bright = _weighted_std_err(weights[mask_bright])
+    mean_baseline = np.average(
+        samples[mask_baseline],
+        weights=weights[mask_baseline]
+    )
+    std_err_baseline = _weighted_std_err(weights[mask_baseline])
+    mean_difference = mean_bright - mean_baseline
+    std_err_diff = np.sqrt(std_err_baseline**2 + std_err_bright**2)
+    lower_bound = FLUX_DOUBLE - 5 * np.sqrt(std_err_diff)
+    upper_bound = FLUX_DOUBLE + 5 * np.sqrt(std_err_diff)
+    within_bounds = lower_bound < mean_difference < upper_bound
+    five_sigma = mean_difference / std_err_diff > 5
     result = np.logical_and(within_bounds, five_sigma)
     return result
 

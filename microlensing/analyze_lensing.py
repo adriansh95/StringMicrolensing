@@ -82,7 +82,9 @@ def _lens_apply(df):
         ).to_numpy()
 
     if t_end_idxs[-1] == len(cl_array):
-        t_end_max = np.concatenate([df.iloc[t_end_idxs[:-1], 1].values, [np.inf]])
+        t_end_max = np.concatenate(
+            [df.iloc[t_end_idxs[:-1], 1].values, [np.inf]]
+        )
     else:
         t_end_max = df.iloc[t_end_idxs, 1].to_numpy()
 
@@ -118,14 +120,16 @@ def t_of_tau(taus, ts):
     x = taus - tau_min
     x_med = tau_med - tau_min
     x_max = tau_max - tau_min
-    y = np.piecewise(x, [x < x_med, x >= x_med], [lambda xx: xx, lambda xx: x_max - xx])
+    y = np.piecewise(
+        x, [x < x_med, x >= x_med], [lambda xx: xx, lambda xx: x_max - xx]
+    )
     result = np.clip(y, a_min=0, a_max=t_max)
     return result
 
-def integrated_event_duration_posterior(taus, ts):
+def integrated_event_duration_posterior(duration_bins, ts):
     """integrates the posterior for an event with start/stop times bounded by ts
-    in bins given by taus"""
-    result = np.zeros(taus.shape)
+    in bins given by tau_bins"""
+    result = np.zeros(tau_bins.shape)
 
     if ~(np.isfinite(ts).all()):
         result[-1] = 1
@@ -134,9 +138,13 @@ def integrated_event_duration_posterior(taus, ts):
         t_max = np.min([t1 - t0, t3 - t2])
         tau_min = t2 - t1
         tau_max = t3 - t0
-        tau_vertices = np.array([tau_min, tau_min + t_max, tau_max - t_max, tau_max])
-        x = np.concatenate((taus, tau_vertices))
-        mask = np.concatenate((np.full(taus.shape, True), np.full(tau_vertices.shape, False)))
+        tau_vertices = np.array(
+            [tau_min, tau_min + t_max, tau_max - t_max, tau_max]
+        )
+        x = np.concatenate((tau_bins, tau_vertices))
+        mask = np.concatenate(
+            (np.full(tau_bins.shape, True), np.full(tau_vertices.shape, False))
+        )
         indices = np.argsort(x)
         x = x[indices]
         mask = mask[indices]
@@ -145,7 +153,9 @@ def integrated_event_duration_posterior(taus, ts):
         y_av = (y[1:] + y[:-1]) / 2
         dx = np.diff(x)
         integral = y_av * dx
-        integral[np.clip(vertex_idxs - 1, a_min=0, a_max=None)] += integral[vertex_idxs]
+        integral[np.clip(vertex_idxs - 1, a_min=0, a_max=None)] += (
+            integral[vertex_idxs]
+        )
         result[:-1] = integral[mask[:-1]]
         result /= result.sum()
 
