@@ -8,7 +8,8 @@ import numpy as np
 
 def great_circle_distance(phi1, phi2, dlambda):
     """
-    Computes the great circle distance between two points on a sphere.
+    Computes the great circle distance (radians)
+    between two points on a sphere.
     """
     cos_sigma = (
         np.sin(phi1) * np.sin(phi2) +
@@ -56,12 +57,12 @@ def ra_dec_to_new_north_pole(
     dec = np.radians(ra_dec[:, 1])
     ra_new_np = np.radians(new_north_pole[0])
     dec_new_np = np.radians(new_north_pole[1])
- 
+
     # Compute angular separation (rho) between (ra, dec) and
     # the new north pole (lmc (ra, dec) by default)
     # using the great circle distance
     rho = great_circle_distance(dec, dec_new_np, ra - ra_new_np)
- 
+
     # Compute position angle (phi)
     # phi = 0 points towards old north pole.
     phi = (

@@ -19,9 +19,10 @@ class EventCalculator():
     def __init__(self, configDict):
         self.tensions = configDict.get("tensions", np.logspace(-15, -8, num=8))
         self.curlyG = configDict.get("curlyG", 1e2)
-        self.hostGalaxySkyCoordinates = configDict.get("hostGalaxySkyCoordinates",
-                                                       [780 * u.kpc,
-                                                        SkyCoord("00h42m44.3s", "+41d16m9s")])
+        self.hostGalaxySkyCoordinates = configDict.get(
+            "hostGalaxySkyCoordinates",
+            [780 * u.kpc, SkyCoord("00h42m44.3s", "+41d16m9s")]
+        )
         self.hostGalaxyMass = configDict.get("hostGalaxyMass", 2 * 1.15e12 * u.solMass)
         self.sourceSkyCoordinates = configDict.get("sourceSkyCoordinates", None)
         self.results = dict(eventRates = None,
