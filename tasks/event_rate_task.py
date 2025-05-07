@@ -38,7 +38,7 @@ class EventRateTask(ETLTask):
             "curlyG": 1e4,
             "hostGalaxySkyCoordinates": [
                 50 * u.kpc,
-                SkyCoord(ra="05h23m34s", dec="69d45.4m", frame="icrs")
+                SkyCoord(ra="05h23m34s", dec="-69d45.4m", frame="icrs")
             ],
             "hostGalaxyMass": 1.38e11 * u.solMass,
             "tensions": np.logspace(-15, -8, num=8)
@@ -67,6 +67,7 @@ class EventRateTask(ETLTask):
 
         result_column_names = [f"mu_{i}" for i in range(-15, -7)]
         result = pd.DataFrame(data=result_data, columns=result_column_names)
+        result.index.name = "tau_index"
         return result
 
     def get_extract_file_path(self, *args):
