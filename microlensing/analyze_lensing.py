@@ -128,8 +128,8 @@ def t_of_tau(taus, ts):
 
 def integrated_event_duration_posterior(duration_bins, ts):
     """integrates the posterior for an event with start/stop times bounded by ts
-    in bins given by tau_bins"""
-    result = np.zeros(tau_bins.shape)
+    in bins given by duration_bins"""
+    result = np.zeros(duration_bins.shape)
 
     if ~(np.isfinite(ts).all()):
         result[-1] = 1
@@ -141,9 +141,9 @@ def integrated_event_duration_posterior(duration_bins, ts):
         tau_vertices = np.array(
             [tau_min, tau_min + t_max, tau_max - t_max, tau_max]
         )
-        x = np.concatenate((tau_bins, tau_vertices))
+        x = np.concatenate((duration_bins, tau_vertices))
         mask = np.concatenate(
-            (np.full(tau_bins.shape, True), np.full(tau_vertices.shape, False))
+            (np.full(duration_bins.shape, True), np.full(tau_vertices.shape, False))
         )
         indices = np.argsort(x)
         x = x[indices]
