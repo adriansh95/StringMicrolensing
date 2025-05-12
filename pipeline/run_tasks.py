@@ -39,7 +39,6 @@ import argparse
 import importlib
 import importlib.util
 import yaml
-#import utils.tasks
 from pipeline.task_coordinator import TaskCoordinator
 
 def register_all_tasks(task_coordinator, tasks_path):
@@ -92,7 +91,7 @@ if __name__ == "__main__":
     register_all_tasks(coordinator, args.task_module)
 
     # Load the YAML configuration file
-    with open(args.config, "r", encoding="utf-8") as file:
+    with open(args.task_yaml, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
     # Extract tasks from the configuration
