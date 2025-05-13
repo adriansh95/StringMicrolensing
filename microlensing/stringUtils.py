@@ -132,9 +132,22 @@ class EventCalculator():
         r1, dmHaloC = self.calculateHaloValues(hostGalaxyDistance)
         dmHaloA = self._dmHaloA
 
-        r = np.array([np.linspace(0 * u.kpc, sourcePositionVector[0], num=nSteps).to(u.kpc),
-                      np.linspace(0 * u.kpc, sourcePositionVector[1], num=nSteps).to(u.kpc),
-                      np.linspace(0 * u.kpc, sourcePositionVector[2], num=nSteps).to(u.kpc)]) * u.kpc
+        r = np.array(
+                [
+                    np.linspace(
+                        0 * u.kpc,
+                        sourcePositionVector[0],
+                        num=nSteps).to(u.kpc),
+                    np.linspace(
+                        0 * u.kpc,
+                        sourcePositionVector[1],
+                        num=nSteps).to(u.kpc),
+                    np.linspace(
+                        0 * u.kpc,
+                        sourcePositionVector[2],
+                        num=nSteps).to(u.kpc)
+                ]
+            ) * u.kpc
 
         self.results["lineOfSight"] = r
         self.results["rStepSize"] = np.linalg.norm(r[:, 1] - r[:, 0])
@@ -236,11 +249,14 @@ class EventCalculator():
         return result
 
     def computeLensingTimePDF(self, stringTheta=np.pi/4, bins=1000):
+        # if bins is not an INT it MUST be in units of seconds
         enhancementFactors = self.results["enhancementFactor"]
         distances = np.linalg.norm(self.results["lineOfSight"], axis=0)
-        lensingTimes = (self.computeLensingTimeSamples(
-            distances,
-            stringTheta=stringTheta).to(u.s).value
+        lensingTimes = (
+            self.computeLensingTimeSamples(
+                distances,
+                stringTheta=stringTheta
+            ).to(u.s).value
         )
 
         if isinstance(bins, int):
@@ -258,6 +274,10 @@ class EventCalculator():
             )
 
         lensingTimeBins *= u.s
+        # Divide by enhancementFactor here not lensingTimePDF.sum(axis=1)
+        # because doing the latter gives a PDF which always integrates
+        # to 1 even if the bins cover only a subset of the support of the 
+        # PDF.
         lensingTimePDF /= (
             enhancementFactors.sum(axis=1).reshape((-1, 1)) *
             np.diff(lensingTimeBins, axis=1).value

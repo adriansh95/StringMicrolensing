@@ -7,7 +7,7 @@ import numpy as np
 import ipdb
 
 from numba import njit
-from utils.helpers import get_bounding_idxs
+from microlensing.helpers import get_bounding_idxs
 from collections import Counter
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
