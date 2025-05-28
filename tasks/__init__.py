@@ -12,6 +12,8 @@ from tasks.good_windows_by_duration_task import (
     GoodWindowsByDurationTask
 )
 from tasks.sample_good_windows_task import SampleGoodWindowsTask
+from tasks.random_sample_sources_task import RandomSampleSourcesTask
+from tasks.rubin_sim_emt_task import RubinSimEMTTask
 
 __all__ = [
     "KDELabelTask",
@@ -23,5 +25,7 @@ __all__ = [
     "EffectiveMonitoringTimeTask",
     "GoodWindowsTask",
     "GoodWindowsByDurationTask",
-    "SampleGoodWindowsTask"
+    "SampleGoodWindowsTask",
+    "RandomSampleSourcesTask",
+    "RubinSimEMTTask"
 ]
