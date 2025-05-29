@@ -2,6 +2,7 @@
 This module defines RubinSimEMTTask.
 """
 import os
+import importlib.util
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -24,11 +25,18 @@ class RubinSimEMTTask(ETLTask):
         "transform": {
             "duration_bin_bounds": [1e-4, 1e4],
             "n_duration_bins": 50,
-            "n_filters_req": 3,
-            "min_per_filter": 2,
             "bounded": True
         }
     }
+
+    @staticmethod
+    def load_plugin_from_path(plugin_path):
+        plugin_path = Path(plugin_path)
+        spec = importlib.util.spec_from_file_location("plugin_module", plugin_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = module.plugin_func
+        return result
 
     def transform(self, data, *args, **kwargs):
         """
@@ -44,11 +52,7 @@ class RubinSimEMTTask(ETLTask):
         """
         opsim_db_fname = kwargs["sim_db_file"]
         run_name = Path(opsim_db_fname).stem
-        scanner_kwargs = {
-            "n_filters_req": kwargs["n_filters_req"],
-            "min_per_filter": kwargs["min_per_filter"],
-            "bounded": kwargs["bounded"]
-        }
+        scanner_plugin_func = kwargs["scanner_plugin_func"]
         n_duration_bins = kwargs["n_duration_bins"]
         duration_bins = np.geomspace(
             *kwargs["duration_bin_bounds"],
@@ -60,7 +64,11 @@ class RubinSimEMTTask(ETLTask):
             data["dec"].to_numpy()
         )
         slicer.slice_points["count"] = np.ones(data.shape[0])
-        metric = EffectiveMonitoringTimeMetric(durations, **scanner_kwargs)
+        metric = EffectiveMonitoringTimeMetric(
+            durations,
+            scanner_plugin_func,
+            bounded=kwargs["bounded"]
+        )
         bundle = maf.MetricBundle(
             metric,
             slicer,
@@ -115,13 +123,8 @@ class RubinSimEMTTask(ETLTask):
                 - sim_db_file (required) : string
                     Path pointing to a rubin_sim .db file.
 
-                - n_filters_req : int
-                    Number of filters required for LcScanner. 
-                    Default: 3
-
-                - min_per_filter : int
-                    Minimum number of samples per filter required
-                    by LcScanner. Default: 2
+                - scanner_plugin_file (required) : string
+                    Path pointing to a plugin for LcScanner
 
                 - bounded : bool
                     Whether or not events must have preceding and 
@@ -134,6 +137,9 @@ class RubinSimEMTTask(ETLTask):
         if "sim_db_file" not in user_kwargs:
             raise ValueError("'sim_db_file' is a required keyword argument.")
 
+        if "scanner_plugin_file" not in user_kwargs:
+            raise ValueError("'scanner_plugin_file' is a required keyword argument.")
+
         kwargs["transform"] = self.DEFAULT_RUN_KWARGS["transform"].copy()
         kwargs["transform"].update(
             {
@@ -143,7 +149,12 @@ class RubinSimEMTTask(ETLTask):
             }
         )
         kwargs["transform"].update(
-            {"sim_db_file": user_kwargs.pop("sim_db_file")}
+            {
+                "sim_db_file": user_kwargs.pop("sim_db_file"),
+                "scanner_plugin_func": self.load_plugin_from_path(
+                    user_kwargs.pop("scanner_plugin_file")
+                )
+            }
         )
         super().run(**kwargs)
 
