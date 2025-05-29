@@ -1,3 +1,3 @@
-from microlensing.lc_scanner_plugins import achromatic_func_factory
+from microlensing.lc_scanner_plugins import unique_min_per_filter_factory
 
-plugin_func = achromatic_func_factory(2, 1)
+plugin_func = unique_min_per_filter_factory(2, 1)
