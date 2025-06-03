@@ -121,7 +121,6 @@ class ETLTask(ABC):
             )
             load_file_path = self.get_load_file_path(*keys)
 
-
             if not transformed_data.empty:
                 # Make a load directory if one doesn't exist
                 os.makedirs(os.path.dirname(load_file_path), exist_ok=True)
