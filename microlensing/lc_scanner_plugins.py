@@ -52,7 +52,7 @@ def unique_min_samples(
     n_filters_req,
     n_samples_req
 ):
-    enough_samples = n_bright.sum() > n_samples_req
+    enough_samples = n_bright.sum(axis=1) > n_samples_req - 1
     result = (
         enough_samples & unique_min_per_filter(
             n_bright,

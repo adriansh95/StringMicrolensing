@@ -4,8 +4,6 @@ and their helper functions.
 """
 
 import numpy as np
-import ipdb
-
 from numba import njit
 from microlensing.helpers import get_bounding_idxs
 from collections import Counter
