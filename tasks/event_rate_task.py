@@ -15,7 +15,7 @@ class EventRateTask(ETLTask):
     EventRateTask takes a dataframe of source positions 
     and calculates the string microlensing event rate at each (ra, dec).
     """
-    DEFAULT_ITERABLES = [45, 50, 55]
+    DEFAULT_ITERABLES = [[None]]
     DEFAULT_RUN_KWARGS = {
         "extract": {
             "columns": ["id", "ra", "dec"]
@@ -24,19 +24,19 @@ class EventRateTask(ETLTask):
             "duration_bin_bounds": [1e-4, 1e4],
             "n_duration_bins": 50,
             "curly_g": 1e4,
-            "host_galaxy_distance": 50,
-            "host_galaxy_ra": "05h23m34s",
-            "host_galaxy_dec": "-69d45.4m",
-            "host_galaxy_mass": 1.38e11
+            "other_galaxy_distances": [49.97, 62.44],
+            "other_galaxy_ras": ["05h23m34s", "00h52m44.8s"],
+            "other_galaxy_decs": ["-69d45.4m", "-72d49m43s"],
+            "other_galaxy_masses": [1.38e11, 2.29e9]
         }
     }
 
     def transform(
-            self,
-            data,
-            *args,
-            **kwargs
-        ):
+        self,
+        data,
+        *args,
+        **kwargs
+    ):
         """
         Transform the data.
 
@@ -79,14 +79,15 @@ class EventRateTask(ETLTask):
         ) * 86400
         event_calculator_config = {
             "curlyG": kwargs["curly_g"],
-            "hostGalaxySkyCoordinates": [
-                kwargs["host_galaxy_distance"] * u.kpc,
-                SkyCoord(
-                    ra=kwargs["host_galaxy_ra"],
-                    dec=kwargs["host_galaxy_dec"]
+            "otherGalaxyParams": [
+                [d * u.kpc, SkyCoord(ra=r, dec=dec), m * u.solMass]
+                for d, r, dec, m in zip(
+                    kwargs["other_galaxy_distances"],
+                    kwargs["other_galaxy_ras"],
+                    kwargs["other_galaxy_decs"],
+                    kwargs["other_galaxy_masses"]
                 )
             ],
-            "hostGalaxyMass": kwargs["host_galaxy_mass"] * u.solMass,
             "tensions": np.logspace(-15, -8, num=8)
         }
         distance_func = kwargs["distance_func"]
@@ -172,7 +173,7 @@ class EventRateTask(ETLTask):
             following key(s):
         """
         kwargs = {}
-        kwargs["iterables"] = [[None]]
+        kwargs["iterables"] = self.DEFAULT_ITERABLES
         kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"].copy()
         kwargs["transform"] = self.DEFAULT_RUN_KWARGS["transform"].copy()
         kwargs["transform"].update(
