@@ -11,25 +11,36 @@ class EventCalculator():
     _a01 = 1
     _gamma50 = 1
     _dmHaloA = 1.15e9 * u.solMass / u.kpc**(3/4)
-    _mwSkyCoordinates = [8 * u.kpc, SkyCoord("17h45m40", "−29d00m28.17s")]
-    _mwMass = 1.15e12 * u.solMass
+    _mwParams= [
+        8 * u.kpc,
+        SkyCoord("17h45m40", "−29d00m28.17s"),
+        1.15e12 * u.solMass
+    ]
     _speedOfLight = 2.98e8 * u.m / u.s
     _internalMotionRMS = _speedOfLight / 2
 
     def __init__(self, configDict):
         self.tensions = configDict.get("tensions", np.logspace(-15, -8, num=8))
         self.curlyG = configDict.get("curlyG", 1e2)
-        self.hostGalaxySkyCoordinates = configDict.get(
-            "hostGalaxySkyCoordinates",
-            [780 * u.kpc, SkyCoord("00h42m44.3s", "+41d16m9s")]
+        self.otherGalaxyParams = configDict.get(
+            "otherGalaxyParams", [
+                [
+                    780 * u.kpc,
+                    SkyCoord("00h42m44.3s", "+41d16m9s"),
+                    2 * 1.15e12 * u.solMass
+                ]
+            ]
         )
-        self.hostGalaxyMass = configDict.get("hostGalaxyMass", 2 * 1.15e12 * u.solMass)
-        self.sourceSkyCoordinates = configDict.get("sourceSkyCoordinates", None)
-        self.results = dict(eventRates = None,
-                            dmRho = None,
-                            lineOfSight = None,
-                            enhancementFactor = None,
-                            rStepSize = None)
+        self.sourceSkyCoordinates = configDict.get(
+            "sourceSkyCoordinates", None
+        )
+        self.results = dict(
+            eventRates=None,
+            dmRho=None,
+            lineOfSight=None,
+            enhancementFactor=None,
+            rStepSize=None
+        )
 
     @staticmethod
     def _foo(y):
@@ -40,10 +51,14 @@ class EventCalculator():
         d = skyCoordinates[0]
         ra = skyCoordinates[1].ra.radian
         dec = skyCoordinates[1].dec.radian
-        cartesianCoords = d * np.array([np.cos(ra) * np.cos(dec),
-                                        np.sin(ra) * np.cos(dec),
-                                        np.sin(dec)])
-        return cartesianCoords
+        result = d * np.array(
+            [
+                np.cos(ra) * np.cos(dec),
+                np.sin(ra) * np.cos(dec),
+                np.sin(dec)
+            ]
+        )
+        return result
 
     @staticmethod
     def cartesianToSkyCoordinates(cartesianCoordinates):
@@ -53,10 +68,12 @@ class EventCalculator():
         return [d, SkyCoord(ra, dec, unit=u.radian)]
 
     @staticmethod
-    def relationalPositionToSkyCoordinates(hostGalaxySkyCoordinates,
-                                           sourceDistanceFromHostGalaxy,
-                                           positionString,
-                                           impactParameter):
+    def relationalPositionToSkyCoordinates(
+        hostGalaxySkyCoordinates,
+        sourceDistanceFromHostGalaxy,
+        positionString,
+        impactParameter
+    ):
         hostGalaxyCenter = EventCalculator.skyCoordinatesToCartesian(hostGalaxySkyCoordinates)
         impactVector = np.cross(hostGalaxyCenter, [1, 0, 0])
         impactVectorNormalized = impactVector / np.linalg.norm(impactVector)
@@ -69,19 +86,24 @@ class EventCalculator():
         elif positionString == "plane":
             sourcePositionVector = hostGalaxyCenter + sourceDistanceFromHostGalaxy * impactVectorNormalized
         elif positionString == "front":
-            hostGalaxyCenterNormalized = hostGalaxyCenter / np.linalg.norm(hostGalaxyCenter)
-            sourcePositionVector = (hostGalaxyCenter -
-                                    sourceDistanceFromHostGalaxy * hostGalaxyCenterNormalized)
+            hostGalaxyCenterNormalized = (
+                hostGalaxyCenter / np.linalg.norm(hostGalaxyCenter)
+            )
+            sourcePositionVector = (
+                hostGalaxyCenter - 
+                (sourceDistanceFromHostGalaxy * hostGalaxyCenterNormalized)
+            )
         return EventCalculator.cartesianToSkyCoordinates(sourcePositionVector)
 
     def betaOfMu(self):
         return 10**self._foo(np.log10(self.tensions * 1e15))
 
-    def calculateHaloValues(self, hostGalaxyDistance):
-        galaxyMassRatio = self.hostGalaxyMass / self._mwMass
-        haloR1 = (1 / (1 + galaxyMassRatio**(1/3))) * hostGalaxyDistance
-        haloC = ((hostGalaxyDistance - haloR1) / haloR1)**(9/4)
-        return haloR1, haloC
+    def calculateHaloValues(self, otherGalaxyDistance, otherGalaxyMass):
+        galaxyMassRatio = otherGalaxyMass / self._mwParams[2]
+        haloR1 = (1 / (1 + galaxyMassRatio**(1/3))) * otherGalaxyDistance
+        haloC = ((otherGalaxyDistance - haloR1) / haloR1)**(9/4)
+        result = (haloR1, haloC)
+        return result
 
     def _calculateEnhancementFactor(self):
         littleHubble = 0.7
@@ -124,50 +146,84 @@ class EventCalculator():
 
 
     def _modelDMRho(self, nSteps):
-        hostGalaxyCenter = self.skyCoordinatesToCartesian(self.hostGalaxySkyCoordinates)
-        homeGalaxyCenter = self.skyCoordinatesToCartesian(self._mwSkyCoordinates)
-        sourcePositionVector = self.skyCoordinatesToCartesian(self.sourceSkyCoordinates)
-        hostGalaxyDistance = np.linalg.norm(hostGalaxyCenter - homeGalaxyCenter)
-
-        r1, dmHaloC = self.calculateHaloValues(hostGalaxyDistance)
-        dmHaloA = self._dmHaloA
-
-        r = np.array(
+        galaxyCenters = (
+            [
+                self.skyCoordinatesToCartesian(
+                    self._mwParams[:-1]
+                )
+            ] +
+            [
+                self.skyCoordinatesToCartesian(galaxyParams[:-1])
+                for galaxyParams in self.otherGalaxyParams 
+            ]
+        )
+        otherGalaxyDistances = [
+            np.linalg.norm(otherGalaxyCenter - galaxyCenters[0])
+            for otherGalaxyCenter in galaxyCenters[1:]
+        ]
+        otherGalaxyMasses = [p[2] for p in self.otherGalaxyParams]
+        haloConstants = (
+            [1] + [
+                self.calculateHaloValues(
+                    otherGalaxyDistance,
+                    otherGalaxyMass
+                )[1]
+                for otherGalaxyDistance, otherGalaxyMass in zip(
+                    otherGalaxyDistances,
+                    otherGalaxyMasses
+                )
+            ]
+        )
+        sourcePositionVector = self.skyCoordinatesToCartesian(
+            self.sourceSkyCoordinates
+        )
+        # lineOfSight is a shape (3, nSteps) array. Each column is
+        # a position [x, y, z] along the line of sight
+        lineOfSight = np.array(
                 [
                     np.linspace(
                         0 * u.kpc,
-                        sourcePositionVector[0],
-                        num=nSteps).to(u.kpc),
-                    np.linspace(
-                        0 * u.kpc,
-                        sourcePositionVector[1],
-                        num=nSteps).to(u.kpc),
-                    np.linspace(
-                        0 * u.kpc,
-                        sourcePositionVector[2],
-                        num=nSteps).to(u.kpc)
+                        sourcePositionVector[i],
+                        num=nSteps
+                    ).to(u.kpc) for i in range(3)
                 ]
             ) * u.kpc
 
-        self.results["lineOfSight"] = r
-        self.results["rStepSize"] = np.linalg.norm(r[:, 1] - r[:, 0])
+        self.results["lineOfSight"] = lineOfSight
+        self.results["rStepSize"] = np.linalg.norm(
+            lineOfSight[:, 1] - lineOfSight[:, 0]
+        )
 
-        # rNorm is the distance from homeGalaxyCenter
-        homeGalaxyCenter = homeGalaxyCenter.reshape(3, 1)
-        hostGalaxyCenter = hostGalaxyCenter.reshape(3, 1)
-        rNorm = np.linalg.norm(r - homeGalaxyCenter, axis=0)
+        # distanceFromGalaxies is a shape 
+        # (len(self.otherGalaxyParams)+1, nSteps) array.
+        # Each row corresponds to a different galaxy
+        # Each column corresponds to a position along
+        # the line of sight. So the element at position
+        # [i, j] gives the distance from the ith galaxy
+        # at the jth position along the line of sight.
+        distanceFromGalaxies = np.array(
+            [
+                np.linalg.norm(
+                    lineOfSight - c.reshape((3, 1)), axis=0
+                ).to(u.kpc) for c in galaxyCenters
+            ]
+        ) * u.kpc
 
-        # rPrime is vector from MW center when within r1,
-        # vector from hostGalaxyCenter otherwise
-        homeGalaxyDistance = np.linalg.norm(r - homeGalaxyCenter, axis=0)
-        hostGalaxyDistance = np.linalg.norm(r - hostGalaxyCenter, axis=0)
-
-        useHomeGalaxyHalo = (dmHaloA / homeGalaxyDistance**(9/4) >
-                             dmHaloC * dmHaloA / hostGalaxyDistance**(9/4))
-
-        self.results["dmRho"] = np.where(useHomeGalaxyHalo,
-                                         dmHaloA / homeGalaxyDistance**(9/4),
-                                         dmHaloC * dmHaloA / hostGalaxyDistance**(9/4))
+        # dmHalos is a a shape (len(self.otherGalaxyParams)+1, nSteps)
+        # array. Each row corresponds to a galaxy, each column
+        # to a position along the line of sight. The [ith, jth] element 
+        # is the dark matter density due to ith galaxy at the jth
+        # position along the line of sight
+        dmHalos = np.array(
+            [
+                (c * self._dmHaloA / d**(9/4)).to(u.solMass / u.kpc**3)
+                for c, d in zip(
+                    haloConstants,
+                    distanceFromGalaxies
+                )
+            ]
+        ) * (u.solMass / u.kpc**3)
+        self.results["dmRho"] = dmHalos.sum(axis=0)
 
     def plotEnhancement(self, title=None):
         fig, ax = plt.subplots(1, 1, figsize=(12, 8))
