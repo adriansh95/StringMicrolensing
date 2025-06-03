@@ -86,11 +86,10 @@ class RubinSimEMTTask(ETLTask):
                 f"{run_name}_EffectiveMonitoringTimeMetric_USER"
             ).replace(".", "_")
         ].metric_values
-        result_data = np.vstack(result_data)
         result = pd.DataFrame(
-            data=result_data,
-            index=data["id"].to_numpy(),
-            columns=[f"tau_{i}" for i in range(n_duration_bins - 1)]
+            data=np.vstack(result_data.data[~result_data.mask]),
+            index=data.loc[~result_data.mask, "id"].to_numpy(),
+            columns=[f"duration_{i}" for i in range(n_duration_bins - 1)]
         )
         result.index.name = "objectid"
         return result
