@@ -27,16 +27,18 @@ class EffectiveMonitoringTimeMetric(maf.BaseMetric):
     def __init__(
         self,
         event_durations,
+        scanner_plugin_func,
         filter_col="filter",
         mjd_col="observationStartMJD",
         exp_time_col="visitExposureTime",
         metric_name="EffectiveMonitoringTimeMetric",
         **kwargs
     ):
+        self.event_durations = event_durations
+        self.scanner_plugin_func = scanner_plugin_func
         self.filter_col = filter_col
         self.mjd_col = mjd_col
         self.exp_time_col = exp_time_col
-        self.event_durations = event_durations
         signature = inspect.signature(LcScanner)
         scanner_defaults = {
             k: v.default
@@ -44,14 +46,6 @@ class EffectiveMonitoringTimeMetric(maf.BaseMetric):
             if v.default is not inspect.Parameter.empty
         }
         self.scanner_kwargs = {
-            "n_filters_req": kwargs.pop(
-                "n_filters_req",
-                scanner_defaults["n_filters_req"]
-            ),
-            "min_per_filter": kwargs.pop(
-                "min_per_filter",
-                scanner_defaults["min_per_filter"]
-            ),
             "bound_both_sides": kwargs.pop(
                 "bounded",
                 scanner_defaults["bound_both_sides"]
@@ -76,7 +70,11 @@ class EffectiveMonitoringTimeMetric(maf.BaseMetric):
             sorted_slice[self.mjd_col] +
             (sorted_slice[self.exp_time_col] / (2 * 86400))
         )
-        scanner = LcScanner(self.event_durations, **self.scanner_kwargs)
+        scanner = LcScanner(
+            self.event_durations,
+            self.scanner_plugin_func,
+            **self.scanner_kwargs
+        )
         windows = scanner._record_windows(exposure_midpoint, filter_index)
         time_delta = windows[1::2] - windows[::2]
         result = np.nansum(time_delta, axis=0) * slice_point["count"]

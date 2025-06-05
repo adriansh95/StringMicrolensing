@@ -15,7 +15,9 @@ class EffectiveMonitoringTimeTask(ETLTask):
     sums these differences to compute the total effective
     monitoring time.
     """
-    def transform(self, data, i_batch):
+    DEFAULT_ITERABLES = (0, 66)
+
+    def transform(self, data, i_batch, **kwargs):
         """
         Transform the data.
 
@@ -23,11 +25,21 @@ class EffectiveMonitoringTimeTask(ETLTask):
         ----------
         data (pandas.DataFrame):
             The data to transform.
+        i_batch : int
+            Which batch number to process.
         """
-        time_diffs = data.xs("end", level=3) - data.xs("start", level=3)
-        result = time_diffs.sum(axis=0).to_frame().T
-        result_idx = pd.Index(data=[i_batch], name="batch_number")
-        result.index = result_idx
+        sampled_ids = kwargs["sampled_ids"]
+        mask = data.index.get_level_values(1).isin(sampled_ids)
+        filtered_data = data.loc[mask]
+        time_diffs = (
+            filtered_data.xs("end", level=3) -
+            filtered_data.xs("start", level=3)
+        )
+        result = pd.concat(
+            [time_diffs.groupby(level=1).agg("sum")],
+            keys=[i_batch],
+            names=["batch_number"]
+        )
         return result
 
     def get_extract_file_path(self, i_batch):
@@ -38,8 +50,6 @@ class EffectiveMonitoringTimeTask(ETLTask):
         ----------
         i_batch (int):
             Which batch number for which to get data.
-        version: (str):
-            Which version for which to get data.
         """
         result = os.path.join(
             self.extract_dir,
@@ -56,15 +66,33 @@ class EffectiveMonitoringTimeTask(ETLTask):
         kwargs : dict
             Keyword arguments for configuring the task. This method expects the 
             following key(s):
+                - sampled_ids_file (required) : string
+                    Path pointing to sampled_objects.parquet, the file
+                    containing the object ids, ra, and dec of the random
+                    subset of sources.
+
                 - batch_range (optional) : `tuple of (int, int)`
                     A tuple specifying the start (inclusive) and stop 
                     (inclusive) batch index numbers to process. For example, 
                     the default value of (0, 66) will process 
                     batches 0 through 66.
         """
-        batch_range = kwargs.get("batch_range", (0, 66))
+        batch_range = kwargs.get(
+            "batch_range",
+            self.DEFAULT_ITERABLES
+        )
         batch_array = np.arange(batch_range[0], batch_range[1]+1, dtype=int)
         kwargs["iterables"] = [batch_array]
+
+        if "sampled_ids_file" not in kwargs:
+            raise ValueError("'sampled_ids_file' is a required keyword argument.")
+
+        kwargs["transform"] = {
+            "sampled_ids": pd.read_parquet(
+                kwargs.pop("sampled_ids_file"),
+                columns=["id"]
+            )["id"].to_numpy()
+        }
         super().run(**kwargs)
 
     def get_load_file_path(self, i_batch):

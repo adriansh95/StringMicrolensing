@@ -33,6 +33,8 @@ class KDELabelTask(ETLTask):
                transform, and load sequentially.
     """
 
+    DEFAULT_ITERABLES = [np.arange(0, 67)]
+
     def transform(self, data, *args):
         """Clean the data and add the cluster labels"""
         data.sort_values(by=["objectid", "mjd"], inplace=True)
@@ -67,11 +69,15 @@ class KDELabelTask(ETLTask):
                 Defaults to (0, 66). The first element specifies the starting
                 index (inclusive) and the second specifies the last (inclusive).
         """
-        batch_range = kwargs.pop("batch_range", (0, 66))
-        first_batch = batch_range[0]
-        last_batch = batch_range[1]
-        batch_array = np.arange(first_batch, last_batch+1)
-        kwargs["iterables"] = [batch_array]
+        if "batch_range" in kwargs:
+            kwargs["iterables"] = [
+                np.arange(
+                    kwargs["batch_range"][0],
+                    kwargs["batch_range"][1]+1
+                )
+            ]
+        else:
+            kwargs["iterables"] = [batch_array]
         super().run(**kwargs)
 
     def get_extract_file_path(self, *args):

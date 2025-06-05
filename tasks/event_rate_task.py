@@ -5,36 +5,38 @@ import os
 import astropy.units as u
 import numpy as np
 import pandas as pd
-from astropy.coordinates import SkyCoord
 from tqdm import tqdm
+from astropy.coordinates import SkyCoord
 from microlensing.stringUtils import EventCalculator
 from pipeline.etl_task import ETLTask
 
 class EventRateTask(ETLTask):
     """
     EventRateTask takes a dataframe of source positions 
-    randomly samples a subset without replacement and calculates
-    the string microlensing event rate at each (ra, dec).
+    and calculates the string microlensing event rate at each (ra, dec).
     """
-    DEFAULT_ITERABLES = [45, 50, 55]
+    DEFAULT_ITERABLES = [[None]]
     DEFAULT_RUN_KWARGS = {
         "extract": {
-            "columns": ["ra", "dec"]
+            "columns": ["id", "ra", "dec"]
         },
         "transform": {
-            "seed": None,
-            "sample_frac": 0.01,
-            "tau_bin_bounds": [1e-4, 1e4],
-            "n_tau_bins": 50
+            "duration_bin_bounds": [1e-4, 1e4],
+            "n_duration_bins": 50,
+            "curly_g": 1e4,
+            "other_galaxy_distances": [49.97, 62.44],
+            "other_galaxy_ras": ["05h23m34s", "00h52m44.8s"],
+            "other_galaxy_decs": ["-69d45.4m", "-72d49m43s"],
+            "other_galaxy_masses": [1.38e11, 2.29e9]
         }
     }
 
     def transform(
-            self,
-            data,
-            source_distance,
-            **kwargs
-        ):
+        self,
+        data,
+        *args,
+        **kwargs
+    ):
         """
         Transform the data.
 
@@ -42,97 +44,101 @@ class EventRateTask(ETLTask):
         ----------
         data : pandas.DataFrame
             The data to transform.
-        source_distance : astropy.units.Quantity
-            Distance at which to place the sources.
+        args:
+            Used to maintain compatibility with base class.
         kwargs: dict
             Keyword arguments for configuring the task. This method expects the 
             following key(s):
-                - seed : int, array-like, BitGenerator, np.random.RandomState,
-                         np.random.Generator, optional
 
-                    Seed used to initialize the random number generator,
-                    passed to `pandas.DataFrame.sample` as the `random_state`
-                    argument. Controls the reproducibility of sampling.
+                - duration_bin_bounds : array-like, optional
+                    2 element array-like setting the upper and lower
+                    limits for the duration bins. Passed to 
+                    numpy.geomspace(
+                        duration_bin_bounds[0],
+                        duration_bin_bounds[1],
+                        num=n_duration_bins
+                    Default: [1e-4, 1e4].
 
-                - sample_frac : float, optional
-                    Fraction of the data to sample, passed to 
-                    `pandas.DataFrame.sample` as the `frac` argument.
-                    Must be between 0 and 1.
-
-                - tau_bins : numpy.array, optional
-                    Bins for the event rate duration probability density
-                    function. The default value is taken from 
+                - n_duration_bins : int, optional
+                    Number of duration bins. Passed to 
+                    numpy.geomspace(
+                        duration_bin_bounds[0],
+                        duration_bin_bounds[1],
+                        num=n_duration_bins
+                    )
+                    Default: 50
 
         Returns:
         ----------
         transformed_data : pandas.DataFrame
             The transformed data.
         """
-        seed = kwargs.get("seed", self.DEFAULT_RUN_KWARGS["transform"]["seed"])
-        sample_frac = kwargs.get(
-            "sample_frac", self.DEFAULT_RUN_KWARGS["transform"]["sample_frac"]
-        )
-        tau_bin_bounds = kwargs.get(
-            "tau_bin_bounds",
-            self.DEFAULT_RUN_KWARGS["transform"]["tau_bin_bounds"]
-        )
-        n_tau_bins = kwargs.get(
-            "n_tau_bins",
-            self.DEFAULT_RUN_KWARGS["transform"]["n_tau_bins"]
-        )
         bins = np.geomspace(
-            tau_bin_bounds[0],
-            tau_bin_bounds[1],
-            num=n_tau_bins
+            *kwargs["duration_bin_bounds"],
+            num=kwargs["n_duration_bins"]
         ) * 86400
-        # bounds are INCLUSIVE on both sides
-        log_tension_bounds = (-15, -8)
         event_calculator_config = {
-            "curlyG": 1e4,
-            "hostGalaxySkyCoordinates": [
-                50 * u.kpc,
-                SkyCoord(ra="05h23m34s", dec="-69d45.4m", frame="icrs")
-            ],
-            "hostGalaxyMass": 1.38e11 * u.solMass,
-            "tensions": np.logspace(
-                log_tension_bounds[0],
-                log_tension_bounds[1],
-                num=(log_tension_bounds[1] - log_tension_bounds[0] + 1)
-            )
-        }
-        result_data = np.zeros(
-            (
-                bins.shape[0] - 1,
-                event_calculator_config["tensions"].shape[0]
-            )
-        )
-        sampled_data = data.sample(frac=sample_frac, random_state=seed)
-
-        for row in tqdm(sampled_data.itertuples(index=False)):
-            event_calculator_config["sourceSkyCoordinates"] = [
-                source_distance * u.kpc,
-                SkyCoord(ra=row.ra, dec=row.dec, unit="deg", frame="icrs")
-            ]
-            event_calculator = EventCalculator(event_calculator_config)
-            event_calculator.calculate(nSteps=int(1e6))
-            time_pdf, _ = event_calculator.computeLensingTimePDF(bins=bins)
-
-            result_data += (
-                time_pdf.transpose() * (
-                    event_calculator
-                    .results["eventRates"]
+            "curlyG": kwargs["curly_g"],
+            "otherGalaxyParams": [
+                [d * u.kpc, SkyCoord(ra=r, dec=dec), m * u.solMass]
+                for d, r, dec, m in zip(
+                    kwargs["other_galaxy_distances"],
+                    kwargs["other_galaxy_ras"],
+                    kwargs["other_galaxy_decs"],
+                    kwargs["other_galaxy_masses"]
                 )
-            ).to(1 / u.day**2).value
+            ],
+            "tensions": np.logspace(-15, -8, num=8)
+        }
+        distance_func = kwargs["distance_func"]
+        data["source_distance"] = distance_func(data)
 
-        result_data *= (data.shape[0] / sampled_data.shape[0])
+        def event_rate_radec(distance, ra, dec):
+            ec_config = event_calculator_config.copy()
+            ec_config["sourceSkyCoordinates"] = [
+                distance * u.kpc,
+                SkyCoord(
+                    ra=ra,
+                    dec=dec,
+                    unit="deg",
+                    frame="icrs"
+                )
+            ]
+            event_calculator = EventCalculator(ec_config)
+            event_calculator.calculate(nSteps=int(1e5))
+            time_pdf, _ = event_calculator.computeLensingTimePDF(bins=bins)
+            result = (
+                time_pdf *
+                event_calculator.results["eventRates"].reshape((-1, 1))
+            ).to(1 / u.day**2).value
+            return result
+
+        result_data = np.zeros((data.shape[0] * 8, bins.shape[0]))
+        result_data[:, 0] = np.tile(
+            event_calculator_config["tensions"],
+            data.shape[0]
+        )
+        result_index = pd.MultiIndex.from_product(
+            [
+                data["id"],
+                list(range(event_calculator_config["tensions"].shape[0]))
+            ],
+            names=["objectid", "tension_index"]
+        )
+        result_columns = (
+            ["tension"] + [f"duration_{i}" for i in range(bins.shape[0] - 1)]
+        )
+
+        for irow, row in tqdm(enumerate(data.itertuples(index=False))):
+            result_data[8 * irow: 8 * (irow + 1), 1:] = event_rate_radec(
+                row.source_distance, row.ra, row.dec
+            )
+
         result = pd.DataFrame(
             data=result_data,
-            columns=[
-                f"mu_{i}"
-                for i in range(log_tension_bounds[0], log_tension_bounds[1] + 1)
-            ]
+            index=result_index,
+            columns=result_columns
         )
-        result.index.name = "tau_index"
         return result
 
     def get_extract_file_path(self, *args):
@@ -152,7 +158,7 @@ class EventRateTask(ETLTask):
         """
         result = os.path.join(
             self.extract_dir,
-            "objects.parquet"
+            "sampled_objects.parquet"
         )
         return result
 
@@ -165,42 +171,42 @@ class EventRateTask(ETLTask):
         user_kwargs: dict
             Keyword arguments for configuring the task. This method expects the 
             following key(s):
-                - source_distances : array-like:
-                    Distance (in kpc) at which to place the sources.
-                    Default: [45, 50, 55].
-
-                - seed : int, array-like, BitGenerator, np.random.RandomState,
-                         np.random.Generator, optional
-
-                    Seed used to initialize the random number generator,
-                    passed to `pandas.DataFrame.sample` as the `random_state`
-                    argument. Controls the reproducibility of sampling.
-
-                - sample_frac : float, optional
-                    Fraction of the data to sample, passed to 
-                    `pandas.DataFrame.sample` as the `frac` argument.
-                    Must be between 0 and 1.
         """
         kwargs = {}
-        kwargs["iterables"] = [
-            user_kwargs.pop("source_distances", self.DEFAULT_ITERABLES)
-        ]
-        kwargs["transform"] = {
-            k: user_kwargs[k]
-            for k in self.DEFAULT_RUN_KWARGS["transform"] if k in user_kwargs
-        }
-        kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"]
+        kwargs["iterables"] = self.DEFAULT_ITERABLES
+        kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"].copy()
+        kwargs["transform"] = self.DEFAULT_RUN_KWARGS["transform"].copy()
+        kwargs["transform"].update(
+            {
+                k: user_kwargs[k]
+                for k in self.DEFAULT_RUN_KWARGS["transform"]
+                if k in user_kwargs
+            }
+        )
+
+        if isinstance(user_kwargs["source_distance"], str):
+            kwargs["extract"]["columns"].append(user_kwargs["source_distance"])
+            kwargs["transform"]["distance_func"] = lambda x: (
+                (10**((x[user_kwargs["source_distance"]] + 5) / 5))
+                / 1000
+            )
+        elif isinstance(user_kwargs["source_distance"], (int, float)):
+            kwargs["transform"]["distance_func"] = lambda _: (
+                user_kwargs["source_distance"]
+            )
+        else:
+            raise ValueError("Invalid type for 'distance_func'")
+
         super().run(**kwargs)
 
-    def get_load_file_path(self, source_distance):
+    def get_load_file_path(self, *args):
         """
         Get the load file path.
 
         Parameters:
         ----------
-        source_distance (astropy.units.Quantity):
-            Distance at which to place the sources.
-
+        args:
+            Used to maintain compatibility with base class.
         Returns:
         ----------
         load_file_path : str
@@ -208,6 +214,6 @@ class EventRateTask(ETLTask):
         """
         result = os.path.join(
             self.load_dir,
-            f"event_rates_{source_distance}.parquet"
+            "event_rates.parquet"
         )
         return result

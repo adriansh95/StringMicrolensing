@@ -60,16 +60,14 @@ class LcScanner():
     def __init__(
         self,
         taus,
-        n_filters_req=3,
-        min_per_filter=2,
+        plugin_func,
         bound_both_sides=True
     ):
         self.taus = taus
-        self.n_samples = 0
-        self.n_filters_req = n_filters_req
-        self.min_per_filter = min_per_filter
-        self.state = _LcScannerState(taus.shape[0])
+        self._achromatic_plugin_func = plugin_func
         self.bound_both_sides = bound_both_sides
+        self.state = _LcScannerState(taus.shape[0])
+        self.n_samples = 0
         self.bounding_indices = (0, -1)
 
     def update(self, start_idx, end_idx, t_start, n_bright):
@@ -107,7 +105,6 @@ class LcScanner():
             )
 
         d = np.diff(result, axis=0)
-        assert((d[np.isfinite(d)] > 0).all())
         result.sort(axis=0)
         result = result[(np.isfinite(result)).any(axis=1)]
         return result
@@ -182,14 +179,9 @@ class LcScanner():
         return result
 
     def _good_window(self):
-        n_bright = self.state.filter.n_bright
-        n_baseline = self.state.filter.n_baseline
-        achromatic = self._numba_achromatic(
-            n_bright,
-            n_baseline,
-            self.n_filters_req,
-            self.min_per_filter,
-            self.taus.shape[0]
+        achromatic = self._achromatic_plugin_func(
+            self.state.filter.n_bright,
+            self.state.filter.n_baseline
         )
         bounded = self._numba_bounded(
             self.state.time.start_idx,
@@ -219,9 +211,9 @@ class LcScanner():
         n_bright,
         n_baseline,
         n_filters_req,
-        min_per_filter,
-        n_taus
+        min_per_filter
     ):
+        n_taus = n_bright.shape[0]
         bright_mask = n_bright > (min_per_filter - 1)
         baseline_mask = n_baseline > 1
         enough_filters = (bright_mask.sum(axis=1) > (n_filters_req - 1))

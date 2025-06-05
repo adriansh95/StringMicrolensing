@@ -99,10 +99,9 @@ class SummaryTableTask(ETLTask):
         result = pd.DataFrame(data=result_data, index=idx)
         return result
 
-    def transform(self, data, *args):
+    def transform(self, data, i_batch):
         """
-        Transform the data. *args added in signature for
-        compatibility with ETLTask
+        Transform the data
         """
         g1 = data.groupby(by="objectid", sort=False)
         lc_class = g1.apply(
@@ -125,7 +124,9 @@ class SummaryTableTask(ETLTask):
         rms_err.columns = [f"rms_err_{f}" for f in rms_err.columns]
         result = pd.concat(
             [sig, rms_err, lc_class],
-            axis=1
+            axis=1,
+            keys=i_batch,
+            names="batch_number"
         )
         return result
 

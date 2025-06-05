@@ -4,8 +4,6 @@ and their helper functions.
 """
 
 import numpy as np
-import ipdb
-
 from numba import njit
 from microlensing.helpers import get_bounding_idxs
 from collections import Counter
@@ -36,7 +34,7 @@ def lens_filter(df, **kwargs):
     check_factor_of_two = kwargs.get("factor_of_two", True)
     label_column= kwargs.get("label_column", "cluster_label")
     df = df.sort_values(by="mjd")
-    cl = df[label_column].values
+    cl = df[label_column].to_numpy()
     lensed_idxs = get_bounding_idxs(cl)
     n_windows = len(lensed_idxs)
 
@@ -78,8 +76,8 @@ def _check_factor(df, df_gb, idx_bounds, **kwargs):
         group = df_gb.get_group(f)
         mask_bright = np.isin(df_gb.indices[f], idx_range)
         mask_baseline = (group[label_column] == 1).to_numpy()
-        samples = group[mag_column].values
-        weights = group[magerr_column].values**-2
+        samples = group[mag_column].to_numpy()
+        weights = group[magerr_column].to_numpy()**-2
         results[i] = _factor_of_two(
             samples,
             weights,
