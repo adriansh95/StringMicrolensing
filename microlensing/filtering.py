@@ -3,18 +3,12 @@ This module supplies lens_filter, unstable_filter, unimodal filter,
 and their helper functions.
 """
 
+from collections import Counter
 import numpy as np
 from numba import njit
-from microlensing.helpers import get_bounding_idxs
-from collections import Counter
+from microlensing.helpers import get_bounding_idxs, weighted_std_err
 
 FLUX_DOUBLE = -2.5 * np.log10(2)
-
-@njit
-def _weighted_std_err(weights):
-    """Computes standard error of weighted mean"""
-    result = np.sqrt(1 / weights.sum())
-    return result
 
 def unstable_filter(df, **kwargs):
     """Returns True if the photometry is unstable (too many peaks in the KDE)"""
@@ -94,12 +88,12 @@ def _factor_of_two(samples, weights, mask_bright, mask_baseline):
         samples[mask_bright],
         weights=weights[mask_bright]
     )
-    std_err_bright = _weighted_std_err(weights[mask_bright])
+    std_err_bright = weighted_std_err(weights[mask_bright])
     mean_baseline = np.average(
         samples[mask_baseline],
         weights=weights[mask_baseline]
     )
-    std_err_baseline = _weighted_std_err(weights[mask_baseline])
+    std_err_baseline = weighted_std_err(weights[mask_baseline])
     mean_difference = mean_bright - mean_baseline
     std_err_diff = np.sqrt(std_err_baseline**2 + std_err_bright**2)
     lower_bound = FLUX_DOUBLE - 5 * np.sqrt(std_err_diff)
