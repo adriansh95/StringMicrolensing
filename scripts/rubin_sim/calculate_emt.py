@@ -6,7 +6,7 @@ import pandas as pd
 
 from pathlib import Path
 from rubin_sim import maf
-from rubin_sim.data import get_data_dir, get_baseline
+from rubin_sim.data import get_baseline
 from utils.rubin_sim_utils import (
     vectorized_filter_map,
     EffectiveMonitoringTimeMetric,
