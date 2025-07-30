@@ -1,5 +1,5 @@
 """
-This module defines EventStatsTask. EventStatsTask
+This module defines SimulatedEventStatsTask. SimulatedEventStatsTask
 iterates over lightcurves grouped in batches. 
 It filters out lightcurves that appear bimodal
 according to the KDE classification. It groups these
@@ -9,12 +9,13 @@ sequence it computes the mean, standard error, and
 standard deviation (if possible) in that band.
 """
 import os
+import glob
 import numpy as np
 import pandas as pd
 from pipeline.etl_task import ETLTask
 from microlensing.analyze_lensing import calculate_event_statistics
 
-class EventStatsTask(ETLTask):
+class SimulatedEventStatsTask(ETLTask):
     """
     Attributes:
         extract_dir (str): Directory containing the input data files to be 
@@ -30,32 +31,36 @@ class EventStatsTask(ETLTask):
         transform(data, *keys):
             Transform the data.
     """
-    DEFAULT_ITERABLES = (0, 132)
+    DEFAULT_ITERABLES = (0, 48)
     DEFAULT_RUN_KWARGS = {
         "extract": {
             "columns": [
                 "objectid",
+                "window_number",
                 "filter",
                 "mag_auto",
                 "magerr_auto",
                 "mjd",
-                "root_2_label"
+                "true_label"
             ]
-        },
-        "transform": {
-            "mag_column": "mag_auto",
-            "magerr_column": "magerr_auto",
-            "label_column": "root_2_label"
         }
     }
 
     @staticmethod
-    def filter_func(df, label_column):
-        cl = df[label_column].to_numpy()
+    def clean_data(df):
+        mask_baseline = df["cluster_label"].astype(bool).to_numpy()
+        bright_filters = df.loc[~mask_baseline, "filter"].unique()
+        baseline_filters = df.loc[mask_baseline, "filter"].unique()
+        result = np.isin(bright_filters, baseline_filters).all()
+        return result
+
+    @staticmethod
+    def filter_func(df):
+        cl = df["cluster_label"].to_numpy()
         result = ((cl == 0).any() & (cl != -1).all())
         return result
 
-    def transform(self, data, i_batch, **kwargs):
+    def transform(self, data, i_duration):
         """
         Transform the data.
 
@@ -64,26 +69,36 @@ class EventStatsTask(ETLTask):
         data: `pandas.DataFrame`
             The data to transform.
         """
-        filtered_data = data.groupby(by="objectid").filter(
-            lambda x: self.filter_func(x, kwargs["label_column"])
+        data = data.rename(columns={"true_label": "cluster_label"})
+        data = (
+            data
+            .groupby(by=["objectid", "window_number"])
+            .filter(self.clean_data)
         )
-        result = filtered_data.groupby(by="objectid").apply(
-            calculate_event_statistics,
-            include_groups=False,
-            **kwargs
-        )
+        filtered_data = data.groupby(
+            by=["objectid", "window_number"]
+        ).filter(self.filter_func)
+        result = filtered_data.groupby(
+            by=["objectid", "window_number"]
+        ).apply(calculate_event_statistics, include_groups=False)
         result = result.set_index(
             ["event_number", "filter"],
             append=True
-        ).reset_index(level=1, drop=True)
+        ).reset_index(level=2, drop=True)
         result = pd.concat(
             [result],
-            names=["batch_number", "objectid", "event_number", "filter"],
-            keys=[i_batch]
+            names=[
+                "duration_index",
+                "objectid",
+                "sim_number",
+                "event_number",
+                "filter"
+            ],
+            keys=[i_duration]
         )
         return result
 
-    def get_extract_file_path(self, i_batch):
+    def get_extract_file_path(self, i_duration):
         """
         Get the extract file path.
 
@@ -92,7 +107,7 @@ class EventStatsTask(ETLTask):
         """
         result = os.path.join(
             self.extract_dir,
-            f"kde_labelled_lightcurves_batch{i_batch}.parquet"
+            f"lensed_lightcurves_duration{i_duration}.parquet"
         )
         return result
 
@@ -106,31 +121,20 @@ class EventStatsTask(ETLTask):
             Keyword arguments for configuring the task. This method expects the 
             following key(s):
         """
-        run_kwargs = {}
-        batch_range = kwargs.get(
-            "batch_range",
+        duration_range = kwargs.get(
+            "duration_range",
             self.DEFAULT_ITERABLES
         )
-        batch_array = np.arange(batch_range[0], batch_range[1]+1, dtype=int)
-        run_kwargs["iterables"] = [batch_array]
-        run_kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"]
-        run_kwargs["transform"] = self.DEFAULT_RUN_KWARGS["transform"]
+        duration_array = np.arange(
+            duration_range[0],
+            duration_range[1]+1,
+            dtype=int
+        )
+        kwargs["iterables"] = [duration_array]
+        kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"]
+        super().run(**kwargs)
 
-        if "mag_column" in kwargs:
-            run_kwargs["extract"]["columns"][2] = kwargs["mag_column"]
-            run_kwargs["transform"]["mag_column"] = kwargs["mag_column"]
-
-        if "magerr_column" in kwargs:
-            run_kwargs["extract"]["columns"][3] = kwargs["magerr_column"]
-            run_kwargs["transform"]["magerr_column"] = kwargs["magerr_column"]
-
-        if "label_column" in kwargs:
-            run_kwargs["extract"]["columns"][5] = kwargs["label_column"]
-            run_kwargs["transform"]["label_column"] = kwargs["label_column"]
-
-        super().run(**run_kwargs)
-
-    def get_load_file_path(self, i_batch):
+    def get_load_file_path(self, i_duration):
         """
         Get the load file path.
 
@@ -139,7 +143,7 @@ class EventStatsTask(ETLTask):
         """
         result = os.path.join(
             self.load_dir,
-            f"event_stats_batch{i_batch}.parquet"
+            f"event_stats_duration{i_duration}.parquet"
         )
         return result
 
@@ -147,7 +151,7 @@ class EventStatsTask(ETLTask):
         """
         Concatenate the results from ETL into a single dataframe.
         """
-        df_files = glob.glob(f"{self.load_dir}event_stats_batch*.parquet")
+        df_files = glob.glob(f"{self.load_dir}event_stats_duration*.parquet")
         dfs = [pd.read_parquet(f) for f in df_files]
         result = pd.concat(dfs, axis=0)
         result.sort_index(inplace=True)
