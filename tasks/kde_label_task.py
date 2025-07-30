@@ -3,6 +3,7 @@ This module contains the KDELabelTask class.
 """
 import os
 import numpy as np
+import pandas as pd
 from microlensing.kde_label import cluster_label_dataframe
 from pipeline.etl_task import ETLTask
 
@@ -33,32 +34,45 @@ class KDELabelTask(ETLTask):
                transform, and load sequentially.
     """
 
-    DEFAULT_ITERABLES = [np.arange(0, 67)]
+    DEFAULT_ITERABLES = [np.arange(0, 133)]
 
-    def transform(self, data, *args):
+    def transform(self, data, i_batch):
         """Clean the data and add the cluster labels"""
         data.sort_values(by=["objectid", "mjd"], inplace=True)
-        g = data.groupby(by="objectid")
-
+        g = data.groupby(
+            by="objectid",
+            group_keys=False,
+            sort=False
+        )
         # Some sources have "simultaneous" measurements. Filter those out.
         data = g.filter(
             lambda x: (np.diff(x["mjd"].to_numpy()) > 0).all()
         )
-        bandwidths = ["variable", 0.13]
-        col_names = [f"bandwidth_{bw}" for bw in bandwidths]
+        bandwidth_funcs = [
+            lambda x: np.sqrt(np.mean(x**2)),
+            lambda x: np.sqrt(2 * np.mean(x**2)),
+            lambda x: np.sqrt(9 * np.mean(x**2) / 2)
+        ]
         g = data.groupby(
             by=["objectid", "filter"],
             group_keys=False,
             sort=False
         )
         result = g.filter(lambda x: len(x) > 2)
-        cl_data = np.zeros((result.shape[0], len(bandwidths)), dtype=int)
-        cl = "cluster_label"
+        cl_data = np.zeros((result.shape[0], len(bandwidth_funcs)), dtype=int)
+        label_columns = ["root_2_label", "2_label", "3_label"]
 
-        for i, bw in enumerate(bandwidths):
-            cl_data[:, i] = cluster_label_dataframe(result, bandwidth=bw)[cl]
+        for i, (bw_func, label) in enumerate(
+                zip(bandwidth_funcs, label_columns)
+            ):
+            cl_data[:, i] = cluster_label_dataframe(
+                result,
+                bandwidth_func=bw_func,
+                output_label_column=label
+            )[label]
 
-        result[col_names] = cl_data
+        result[label_columns] = cl_data
+        result = pd.concat([result], keys=[i_batch], names=["batch_number"])
         return result
 
     def run(self, **kwargs):
@@ -69,28 +83,28 @@ class KDELabelTask(ETLTask):
                 Defaults to (0, 66). The first element specifies the starting
                 index (inclusive) and the second specifies the last (inclusive).
         """
+        run_kwargs = {}
+
         if "batch_range" in kwargs:
-            kwargs["iterables"] = [
+            run_kwargs["iterables"] = [
                 np.arange(
                     kwargs["batch_range"][0],
                     kwargs["batch_range"][1]+1
                 )
             ]
         else:
-            kwargs["iterables"] = [batch_array]
-        super().run(**kwargs)
+            run_kwargs["iterables"] = self.DEFAULT_ITERABLES
+        super().run(**run_kwargs)
 
-    def get_extract_file_path(self, *args):
+    def get_extract_file_path(self, i_batch):
         """Get the extract file path corresponding to i_batch"""
-        i_batch, = args
         result = os.path.join(
             self.extract_dir, f"lightcurves_batch{i_batch}.parquet"
             )
         return result
 
-    def get_load_file_path(self, *args):
+    def get_load_file_path(self, i_batch):
         """Get the load file path corresponding to i_batch"""
-        i_batch, = args
         result = os.path.join(
             self.load_dir,
             f"kde_labelled_lightcurves_batch{i_batch}.parquet"
