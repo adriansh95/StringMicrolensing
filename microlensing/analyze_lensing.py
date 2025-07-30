@@ -178,19 +178,20 @@ def count_filter_seq(df):
     result = filters_in_event.value_counts()
     return result
 
-def calculate_event_statistics(df, label_column="cluster_label"):
+def calculate_event_statistics(df, **kwargs):
     """
     Iterates over all events in the lightcurve and 
     calculates mean, standard error, and standard deviation
     of bright and baseline modes.
     """
+    label_column=kwargs.get("label_column", "cluster_label")
     df = df.sort_values(by="mjd")
     cl = df[label_column].to_numpy()
     lensed_idxs = get_bounding_idxs(cl)
     g = df.groupby(by="filter")
     result_data = np.concatenate(
         [
-            event_stats(df, g, pair, i_event)
+            event_stats(df, g, pair, i_event, **kwargs)
             for i_event, pair in enumerate(lensed_idxs)
         ],
         axis=0
@@ -243,6 +244,7 @@ def event_filter_stats(samples, weights, mask_bright, mask_baseline):
         weights=weights[mask_bright]
     )
     std_err_bright = weighted_std_err(weights[mask_bright])
+
     if mask_bright.sum() < 2:
         std_bright = np.nan
     else:
@@ -250,6 +252,7 @@ def event_filter_stats(samples, weights, mask_bright, mask_baseline):
             samples[mask_bright],
             weights=weights[mask_bright]
         )
+
     mean_baseline = np.average(
         samples[mask_baseline],
         weights=weights[mask_baseline]
