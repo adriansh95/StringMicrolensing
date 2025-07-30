@@ -8,7 +8,7 @@ import numpy as np
 from microlensing.lc_scanner import LcScanner
 from microlensing.helpers import filter_map
 from pipeline.etl_task import ETLTask
-from config.config_loader import load_config
+from tasks.task_helpers import load_plugin_from_path
 
 class GoodWindowsTask(ETLTask):
     """
@@ -31,12 +31,22 @@ class GoodWindowsTask(ETLTask):
         transform(data, *keys):
             Transform the data.
     """
-    def __init__(self, extract_dir, load_dir,  config_paths):
-        super().__init__(extract_dir, load_dir)
-        self.config = load_config(
-            yaml_path=config_paths["yaml_path"],
-            py_path=config_paths["py_path"]
-        )
+    DEFAULT_ITERABLES = [np.arange(0, 132)]
+    DEFAULT_RUN_KWARGS = {
+        "extract": {
+            "columns": [
+                "objectid",
+                "mjd",
+                "exptime",
+                "filter",
+            ]
+        },
+        "transform": {
+            "duration_bin_bounds": [1e-4, 1e4],
+            "n_duration_bins": 50,
+            "bound_both_sides": True
+        }
+    }
 
     @staticmethod
     def _good_windows_df(data, scanner):
@@ -91,9 +101,21 @@ class GoodWindowsTask(ETLTask):
         transformed_data : `pandas.DataFrame`
             The transformed data.
         """
-        scanner = kwargs["scanner"]
+        duration_bins = np.geomspace(
+            *kwargs["duration_bin_bounds"],
+            num=kwargs["n_duration_bins"]
+        )
+        durations = (duration_bins[1:] + duration_bins[:-1]) / 2
+        scanner = LcScanner(
+            durations,
+            kwargs["scanner_plugin_func"],
+            bound_both_sides=kwargs["bound_both_sides"]
+        )
         data.sort_values(by=["objectid", "mjd"], inplace=True)
         data["filter_index"] = data["filter"].apply(filter_map)
+        objects = pd.Series(data["objectid"].unique())
+        sampled_objects = objects.sample(frac=0.01)
+        data = data.loc[data["objectid"].isin(sampled_objects)]
         g = data.groupby(by="objectid")
         transformed_data = g.apply(
             self._good_windows_df, scanner
@@ -135,30 +157,36 @@ class GoodWindowsTask(ETLTask):
                     whether or not hypothetical events must be bounded
                     on both sides in order to be considered a 'good window.'
         """
-        batch_range = kwargs.pop("batch_range", (0, 66))
-        version = kwargs.pop("version")
-        kwargs["iterables"] = [np.arange(batch_range[0], batch_range[1]+1)]
-        kwargs["extract"] = {
-            "columns": [
-                "objectid",
-                "mjd",
-                "exptime",
-                "filter",
-            ]
-        }
-        scanner = LcScanner(
-            self.config["taus"],
-            n_filters_req=self.config["scanner"][version]["unique_filters"],
-            min_per_filter=(
-                self.config["scanner"][version]["samples_per_filter"]
-            ),
-            bound_both_sides = kwargs.pop("bound_both_sides")
+        run_kwargs = {}
+
+        if "scanner_plugin_file" not in kwargs:
+            raise ValueError(
+                "'scanner_plugin_file' is a required keyword argument."
+            )
+
+        if "batch_range" in kwargs:
+            batch_range = kwargs.pop("batch_range")
+            run_kwargs["iterables"] = [np.arange(batch_range[0], batch_range[1]+1)]
+        else:
+            run_kwargs["iterables"] = self.DEFAULT_ITERABLES
+
+        run_kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"].copy()
+        run_kwargs["transform"] = self.DEFAULT_RUN_KWARGS["transform"].copy()
+        run_kwargs["transform"].update(
+            {
+                k: kwargs[k]
+                for k in self.DEFAULT_RUN_KWARGS["transform"]
+                if k in kwargs
+            }
         )
-        kwargs["transform"] = {
-            "version": version,
-            "scanner": scanner
-        }
-        super().run(**kwargs)
+        run_kwargs["transform"].update(
+            {
+                "scanner_plugin_func": load_plugin_from_path(
+                    kwargs.pop("scanner_plugin_file")
+                )
+            }
+        )
+        super().run(**run_kwargs)
 
     def get_load_file_path(self, i_batch):
         """
