@@ -48,25 +48,27 @@ def _cl_apply(df, bandwidth, mag_column, magerr_column):
     result = _label_cluster_membership(samples, modality_result["modes"], modality_result["min"])
     return pd.DataFrame(data=result, index=idxs)
 
-def cluster_label_dataframe(df,
-                            groups=["objectid", "filter"],
-                            mag_column="mag_auto",
-                            magerr_column="magerr_auto",
-                            bandwidth=0.13):
+def cluster_label_dataframe(
+        df,
+        groups=["objectid", "filter"],
+        mag_column="mag_auto",
+        magerr_column="magerr_auto",
+        output_label_column="cluster_label",
+        bandwidth_func=lambda x: np.sqrt(np.mean(x**2))
+    ):
     """Groups the dataframe by objectid and filter (default), applies a gaussian
     KDE to the magnitudes using the specified bandwidth, and labels the
     cluster membership of each sample. 1 encodes baseline, 0 encodes bright
     excursions from baseline, and -1 encodes a star with unstable photometry
     (too many peaks in the KDE)."""
     g = df.groupby(by=groups, sort=False, group_keys=False)
-
-    if bandwidth == "variable":
-        bw = lambda x: np.sqrt(np.mean(x**2))
-    else:
-        bw = lambda x: bandwidth
-
-    cluster_label = g.apply(_cl_apply, bw, mag_column, magerr_column)
-    result = df.assign(cluster_label=cluster_label)
+    cluster_label = g.apply(
+        _cl_apply,
+        bandwidth_func,
+        mag_column,
+        magerr_column
+    )
+    result = df.assign(**{f"{output_label_column}": cluster_label})
     return result
 
 @njit
