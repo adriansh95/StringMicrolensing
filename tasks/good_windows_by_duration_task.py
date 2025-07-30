@@ -3,9 +3,9 @@ This module defines GoodWindowsByDurationTask.
 """
 import os
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 from pipeline.etl_task import ETLTask
-from config.config_loader import load_config
 
 class GoodWindowsByDurationTask(ETLTask):
     """
@@ -32,11 +32,6 @@ class GoodWindowsByDurationTask(ETLTask):
         transform(data, *keys):
             Transform the data.
     """
-    def __init__(self, extract_dir, load_dir,  config_paths):
-        super().__init__(extract_dir, load_dir)
-        self.config = load_config(
-            py_path=config_paths["py_path"]
-        )
 
     def transform(self, data):
         """
@@ -85,21 +80,29 @@ class GoodWindowsByDurationTask(ETLTask):
                     Which event durations to process. Indicates start
                     and stop, both inclusive.
         """
+        run_kwargs = {}
         # size - 1 since endpoints are both inclusive
-        tau_range = kwargs.pop(
-            "tau_range",
-            (0, self.config["taus"].size - 1)
+        tau_array = np.arange(
+            *kwargs.pop(
+                "tau_range",
+                (0, 49)
+            )
         )
-        batch_range = (0, 66)
+        run_kwargs["iterables"] = np.arange(
+            *kwargs.pop(
+                "batch_range",
+                (0, 133)
+            )
+        )
 
-        for i_tau in tqdm(range(tau_range[0], tau_range[1]+1)):
-            kwargs["extract"] = {"columns": [f"tau_{i_tau}"]}
+        for i_tau in tqdm(tau_array):
+            run_kwargs["extract"] = {"columns": [f"tau_{i_tau}"]}
             extract_file_paths = [
                 self.get_extract_file_path(i_batch)
-                for i_batch in range(batch_range[0], batch_range[1]+1)
+                for i_batch in run_kwargs["iterables"]
             ]
             data_list = [
-                self.extract(f, **kwargs["extract"])
+                self.extract(f, **run_kwargs["extract"])
                 for f in extract_file_paths
             ]
             transformed_data = self.transform(data_list)
