@@ -2,15 +2,15 @@
 This module defines RubinSimEMTTask.
 """
 import os
-import importlib.util
 from pathlib import Path
 import pandas as pd
 import numpy as np
+from rubin_sim import maf
 from microlensing.rubin_sim_utils import (
     EffectiveMonitoringTimeMetric
 )
-from rubin_sim import maf
 from pipeline.etl_task import ETLTask
+from tasks.task_helpers import load_plugin_from_path
 
 class RubinSimEMTTask(ETLTask):
     """
@@ -29,15 +29,6 @@ class RubinSimEMTTask(ETLTask):
         }
     }
 
-    @staticmethod
-    def load_plugin_from_path(plugin_path):
-        plugin_path = Path(plugin_path)
-        spec = importlib.util.spec_from_file_location("plugin_module", plugin_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        result = module.plugin_func
-        return result
-
     def transform(self, data, *args, **kwargs):
         """
         Transform the data.
@@ -52,7 +43,6 @@ class RubinSimEMTTask(ETLTask):
         """
         opsim_db_fname = kwargs["sim_db_file"]
         run_name = Path(opsim_db_fname).stem
-        scanner_plugin_func = kwargs["scanner_plugin_func"]
         n_duration_bins = kwargs["n_duration_bins"]
         duration_bins = np.geomspace(
             *kwargs["duration_bin_bounds"],
@@ -66,14 +56,14 @@ class RubinSimEMTTask(ETLTask):
         slicer.slice_points["count"] = np.ones(data.shape[0])
         metric = EffectiveMonitoringTimeMetric(
             durations,
-            scanner_plugin_func,
+            kwargs["scanner_plugin_func"],
             bounded=kwargs["bounded"]
         )
         bundle = maf.MetricBundle(
             metric,
             slicer,
             "",
-            run_name=f"{run_name}"
+            run_name=run_name
         )
         group = maf.MetricBundleGroup(
             [bundle],
@@ -137,7 +127,9 @@ class RubinSimEMTTask(ETLTask):
             raise ValueError("'sim_db_file' is a required keyword argument.")
 
         if "scanner_plugin_file" not in user_kwargs:
-            raise ValueError("'scanner_plugin_file' is a required keyword argument.")
+            raise ValueError(
+                "'scanner_plugin_file' is a required keyword argument."
+            )
 
         kwargs["transform"] = self.DEFAULT_RUN_KWARGS["transform"].copy()
         kwargs["transform"].update(
@@ -150,7 +142,7 @@ class RubinSimEMTTask(ETLTask):
         kwargs["transform"].update(
             {
                 "sim_db_file": user_kwargs.pop("sim_db_file"),
-                "scanner_plugin_func": self.load_plugin_from_path(
+                "scanner_plugin_func": load_plugin_from_path(
                     user_kwargs.pop("scanner_plugin_file")
                 )
             }
