@@ -3,9 +3,11 @@ This module provides helper functions which are shared amongst
 more than one module in the same directory
 """
 import numpy as np
+from numba import njit
 
 FILTER_ORDER = {"u": 0, "g": 1, "r": 2, "i": 3, "z": 4, "Y": 5, "VR": 6}
 
+@njit
 def weighted_std_err(weights):
     return np.sqrt(1 / weights.sum())
 
