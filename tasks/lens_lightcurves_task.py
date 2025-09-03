@@ -14,7 +14,7 @@ class LensLightcurvesTask(ETLTask):
     """
     DEFAULT_BATCH_ARRAY = np.arange(0, 132)
     DEFAULT_TAU_ARRAY = np.arange(0, 49)
-    EVENT_DURATIONS = np.geomspace(1e-4, 1e4, num=50)
+    DEFUALT_DURATIONS = self._default_durations()
     DEFAULT_RUN_KWARGS = {
         "extract": {
             "columns": [
@@ -42,6 +42,12 @@ class LensLightcurvesTask(ETLTask):
             ]
         }
     }
+
+    @staticmethod
+    def _default_durations():
+        bins = np.geomspace(1e-4, 1e4, num=50)
+        result = (bins[1:] + bins[:-1]) / 2
+        return result
 
     def transform(
         self,
