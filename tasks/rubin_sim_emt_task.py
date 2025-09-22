@@ -53,7 +53,6 @@ class RubinSimEMTTask(ETLTask):
             data["ra"].to_numpy(),
             data["dec"].to_numpy()
         )
-        slicer.slice_points["count"] = np.ones(data.shape[0])
         metric = EffectiveMonitoringTimeMetric(
             durations,
             kwargs["scanner_plugin_func"],
