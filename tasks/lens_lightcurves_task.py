@@ -14,7 +14,8 @@ class LensLightcurvesTask(ETLTask):
     """
     DEFAULT_BATCH_ARRAY = np.arange(0, 132)
     DEFAULT_TAU_ARRAY = np.arange(0, 49)
-    DEFUALT_DURATIONS = self._default_durations()
+    DEFAULT_BINS = np.geomspace(1e-4, 1e4, num=50)
+    DEFAULT_DURATIONS = (DEFAULT_BINS[1:] + DEFAULT_BINS[:-1]) / 2
     DEFAULT_RUN_KWARGS = {
         "extract": {
             "columns": [
@@ -42,12 +43,6 @@ class LensLightcurvesTask(ETLTask):
             ]
         }
     }
-
-    @staticmethod
-    def _default_durations():
-        bins = np.geomspace(1e-4, 1e4, num=50)
-        result = (bins[1:] + bins[:-1]) / 2
-        return result
 
     def transform(
         self,
@@ -179,7 +174,7 @@ class LensLightcurvesTask(ETLTask):
 
                 transformed_data = self.transform(
                     data,
-                    self.EVENT_DURATIONS[i_tau],
+                    self.DEFAULT_DURATIONS[i_tau],
                     sampled_windows
                 )
                 load_file_path = self.get_load_file_path(i_batch, i_tau)
