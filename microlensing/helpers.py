@@ -3,8 +3,13 @@ This module provides helper functions which are shared amongst
 more than one module in the same directory
 """
 import numpy as np
+from numba import njit
 
 FILTER_ORDER = {"u": 0, "g": 1, "r": 2, "i": 3, "z": 4, "Y": 5, "VR": 6}
+
+@njit
+def weighted_std_err(weights):
+    return np.sqrt(1 / weights.sum())
 
 def weighted_std(vals, weights):
     var = np.cov(vals, aweights=weights).item()
@@ -16,11 +21,13 @@ def filter_map(char):
     return result
 
 def get_bounding_idxs(cluster_label_array):
-    """This function finds time-contiguous sequences of measurements within
+    """
+    This function finds time-contiguous sequences of measurements within
     a lightcurve which were labelled bright by the gaussian KDE method
     within the kde_labeling module and returns the bounding indexes 
     (that is, the index of the sample preceding the bright sequence
-    and the index of the sample following the bright sequence)."""
+    and the index of the sample following the bright sequence).
+    """
     n_total = len(cluster_label_array)
     idxs = np.arange(n_total)
     t_start = [i for i in idxs[:-1]

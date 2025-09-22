@@ -4,7 +4,7 @@ This module provides functions for analyzing candidate lensing events.
 from collections import Counter
 import numpy as np
 import pandas as pd
-from .helpers import get_bounding_idxs
+from .helpers import get_bounding_idxs, weighted_std, weighted_std_err
 
 def make_lensing_dataframe(
         df,
@@ -176,4 +176,100 @@ def count_filter_seq(df):
     like 'gri' and 'gir' are counted correctly, and counts the number of each sequence."""
     filters_in_event = df["filters"].apply(lambda x: "".join(sorted(set(x))))
     result = filters_in_event.value_counts()
+    return result
+
+def calculate_event_statistics(df, **kwargs):
+    """
+    Iterates over all events in the lightcurve and 
+    calculates mean, standard error, and standard deviation
+    of bright and baseline modes.
+    """
+    label_column=kwargs.get("label_column", "cluster_label")
+    df = df.sort_values(by="mjd")
+    cl = df[label_column].to_numpy()
+    lensed_idxs = get_bounding_idxs(cl)
+    g = df.groupby(by="filter")
+    result_data = np.concatenate(
+        [
+            event_stats(df, g, pair, i_event, **kwargs)
+            for i_event, pair in enumerate(lensed_idxs)
+        ],
+        axis=0
+    )
+
+    result_columns = [
+        "event_number",
+        "filter",
+        "mean_bright",
+        "std_err_bright",
+        "std_bright",
+        "mean_baseline",
+        "std_err_baseline",
+        "std_baseline"
+    ]
+    result = pd.DataFrame(
+        data=result_data,
+        columns=result_columns
+    )
+    return result
+
+def event_stats(df, df_gb, idx_bounds, i_event, **kwargs):
+    mag_column = kwargs.get("mag_column", "mag_auto")
+    magerr_column = kwargs.get("magerr_column", "magerr_auto")
+    label_column = kwargs.get("label_column", "cluster_label")
+    l, u = idx_bounds
+    idx_range = np.arange(l+1, u)
+    filters = df["filter"].iloc[l+1: u].unique()
+    result = np.full((len(filters), 8), 0, dtype=object)
+    result[:, 0] = i_event
+
+    for i, f in enumerate(filters):
+        result[i, 1] = f
+        group = df_gb.get_group(f)
+        mask_bright = np.isin(df_gb.indices[f], idx_range)
+        mask_baseline = (group[label_column] == 1).to_numpy()
+        samples = group[mag_column].to_numpy()
+        weights = group[magerr_column].to_numpy()**-2
+        result[i, 2:] = event_filter_stats(
+            samples,
+            weights,
+            mask_bright,
+            mask_baseline
+        )
+    return result
+
+def event_filter_stats(samples, weights, mask_bright, mask_baseline):
+    mean_bright = np.average(
+        samples[mask_bright],
+        weights=weights[mask_bright]
+    )
+    std_err_bright = weighted_std_err(weights[mask_bright])
+
+    if mask_bright.sum() < 2:
+        std_bright = np.nan
+    else:
+        std_bright = weighted_std(
+            samples[mask_bright],
+            weights=weights[mask_bright]
+        )
+
+    mean_baseline = np.average(
+        samples[mask_baseline],
+        weights=weights[mask_baseline]
+    )
+    std_err_baseline = weighted_std_err(weights[mask_baseline])
+    std_baseline = weighted_std(
+        samples[mask_baseline],
+        weights=weights[mask_baseline]
+    )
+    result = np.array(
+        [
+            mean_bright,
+            std_err_bright,
+            std_bright,
+            mean_baseline,
+            std_err_baseline,
+            std_baseline
+        ]
+    )
     return result

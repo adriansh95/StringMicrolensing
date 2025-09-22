@@ -77,7 +77,7 @@ class EffectiveMonitoringTimeMetric(maf.BaseMetric):
         )
         windows = scanner._record_windows(exposure_midpoint, filter_index)
         time_delta = windows[1::2] - windows[::2]
-        result = np.nansum(time_delta, axis=0) * slice_point["count"]
+        result = np.nansum(time_delta, axis=0)
         return result
 
 class EffectiveMonitoringTimeSummaryMetric(maf.BaseMetric):

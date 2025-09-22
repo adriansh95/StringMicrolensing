@@ -11,7 +11,6 @@ import numpy as np
 from microlensing.filtering import lightcurve_classifier
 from microlensing.helpers import weighted_std
 from pipeline.etl_task import ETLTask
-from config.config_loader import load_config
 
 class SummaryTableTask(ETLTask):
     """
@@ -62,12 +61,21 @@ class SummaryTableTask(ETLTask):
             for both variable and fixed 130 mmag bandwidths.
 
     """
-
-    def __init__(self, extract_dir, load_dir, config_paths):
-        super().__init__(extract_dir, load_dir)
-        self.config = load_config(
-            yaml_path=config_paths["yaml_path"]
-        )["scanner"]
+    DEFAULT_ITERABLES = (0, 132)
+    DEFAULT_RUN_KWARGS = {
+        "extract": {
+            "columns": [
+                "objectid",
+                "mag_auto",
+                "magerr_auto",
+                "mjd",
+                "filter",
+                "root_2_label",
+                "2_label",
+                "3_label"
+            ]
+        }
+    }
 
     def lc_class_dataframe(self, data):
         """
@@ -75,28 +83,17 @@ class SummaryTableTask(ETLTask):
         and labels the lightcurves as "unimodal", "background",
         "unstable", or "NA".
         """
-        versions = list(self.config.keys())
-        fixed_bw_lc_class = [
+        labels = ["root_2_label", "2_label", "3_label"]
+        result_data = [
             lightcurve_classifier(
                 data,
-                label_column="bandwidth_0.13",
-                **self.config[v]
+                label_column=l,
+                min_per_filter=1,
+                n_filters_req=2
             )
-            for v in versions
+            for l in labels
         ]
-        var_bw_lc_class = [
-            lightcurve_classifier(
-                data,
-                label_column="bandwidth_variable",
-                **self.config[v]
-            )
-            for v in versions
-        ]
-        fixed_bw_idx = [f"fixed_bw_{v}_lc_class" for v in versions]
-        variable_bw_idx = [f"variable_bw_{v}_lc_class" for v in versions]
-        idx = fixed_bw_idx + variable_bw_idx
-        result_data = fixed_bw_lc_class + var_bw_lc_class
-        result = pd.DataFrame(data=result_data, index=idx)
+        result = pd.DataFrame(data=result_data, index=labels)
         return result
 
     def transform(self, data, i_batch):
@@ -124,9 +121,11 @@ class SummaryTableTask(ETLTask):
         rms_err.columns = [f"rms_err_{f}" for f in rms_err.columns]
         result = pd.concat(
             [sig, rms_err, lc_class],
-            axis=1,
-            keys=i_batch,
-            names="batch_number"
+            axis=1
+        )
+        result.index = pd.MultiIndex.from_product(
+            [[i_batch], result.index],
+            names=["batch_number", result.index.name]
         )
         return result
 
@@ -150,25 +149,15 @@ class SummaryTableTask(ETLTask):
                 element specifies the starting index (inclusive) and the second
                 specifies the last (inclusive).
         """
-        batch_range = kwargs.get("batch_range", (0, 66))
-        first_batch = batch_range[0]
-        last_batch = batch_range[1]
-        batch_array = np.arange(first_batch, last_batch+1)
-        kwargs["iterables"] = [batch_array]
-        kwargs["extract"] = {
-            "columns": [
-                "objectid",
-                "mag_auto",
-                "magerr_auto",
-                "mjd",
-                "mjd_mid",
-                "exptime",
-                "filter",
-                "bandwidth_variable",
-                "bandwidth_0.13"
-            ]
-        }
-        super().run(**kwargs)
+        run_kwargs = {}
+        batch_range = kwargs.get(
+            "batch_range",
+            self.DEFAULT_ITERABLES
+        )
+        batch_array = np.arange(batch_range[0], batch_range[1]+1, dtype=int)
+        run_kwargs["iterables"] = [batch_array]
+        run_kwargs["extract"] = self.DEFAULT_RUN_KWARGS["extract"]
+        super().run(**run_kwargs)
 
     def get_extract_file_path(self, *args):
         """Get the extract file path corresponding to i_batch"""

@@ -1,0 +1,31 @@
+asemi,double precision
+bsemi,double precision
+class_star,double precision
+dec,double precision
+exposure,text
+exptime,double precision
+filter,text
+flags,bigint
+fwhm,double precision
+kron_radius,double precision
+mag_aper1,double precision
+mag_aper2,double precision
+mag_aper4,double precision
+mag_aper8,double precision
+mag_auto,double precision
+magerr_aper1,double precision
+magerr_aper2,double precision
+magerr_aper4,double precision
+magerr_aper8,double precision
+magerr_auto,double precision
+mjd,double precision
+mjd_mid,double precision
+objectid,text
+ra,double precision
+seeing,double precision
+theta,double precision
+x,double precision
+y,double precision
+root_2_label,bigint
+2_label,bigint
+3_label,bigint

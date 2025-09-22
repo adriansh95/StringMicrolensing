@@ -23,6 +23,8 @@ class EventRateTask(ETLTask):
         "transform": {
             "duration_bin_bounds": [1e-4, 1e4],
             "n_duration_bins": 50,
+            "log_tension_bounds": [-15, -8],
+            "n_tensions": 8,
             "curly_g": 1e4,
             "other_galaxy_distances": [49.97, 62.44],
             "other_galaxy_ras": ["05h23m34s", "00h52m44.8s"],
@@ -68,6 +70,29 @@ class EventRateTask(ETLTask):
                     )
                     Default: 50
 
+                - log_tension_bounds : array-like or tuple, optional
+                    2 element array-like or tuple setting the log (base 10)
+                    of the dimensionless tensions (ie G * mu / c**2). 
+                    Passed to:
+                    numpy.logspace(
+                        log_tension_bounds[0],
+                        log_tension_bounds[1],
+                        num=n_tensions
+                    )
+                    Default: [-15, -8]
+
+                - n_tensions : int, optional
+                    Number of tensions between log_tension_bounds
+                    (including both endpoints).
+                    Passed to:
+                    numpy.logspace(
+                        log_tension_bounds[0],
+                        log_tension_bounds[1],
+                        num=n_tensions
+                    )
+                    Default: 8
+
+
         Returns:
         ----------
         transformed_data : pandas.DataFrame
@@ -88,7 +113,10 @@ class EventRateTask(ETLTask):
                     kwargs["other_galaxy_masses"]
                 )
             ],
-            "tensions": np.logspace(-15, -8, num=8)
+            "tensions": np.logspace(
+                *kwargs["log_tension_bounds"],
+                num=n_tensions
+            )
         }
         distance_func = kwargs["distance_func"]
         data["source_distance"] = distance_func(data)
@@ -113,7 +141,13 @@ class EventRateTask(ETLTask):
             ).to(1 / u.day**2).value
             return result
 
-        result_data = np.zeros((data.shape[0] * 8, bins.shape[0]))
+        n_tensions = event_calculator_config["tensions"].shape[0]
+        result_data = np.zeros(
+            (
+                data.shape[0] * n_tensions,
+                bins.shape[0]
+            )
+        )
         result_data[:, 0] = np.tile(
             event_calculator_config["tensions"],
             data.shape[0]
@@ -130,8 +164,10 @@ class EventRateTask(ETLTask):
         )
 
         for irow, row in tqdm(enumerate(data.itertuples(index=False))):
-            result_data[8 * irow: 8 * (irow + 1), 1:] = event_rate_radec(
-                row.source_distance, row.ra, row.dec
+            result_data[n_tensions * irow: n_tensions * (irow + 1), 1:] = (
+                event_rate_radec(
+                    row.source_distance, row.ra, row.dec
+                )
             )
 
         result = pd.DataFrame(

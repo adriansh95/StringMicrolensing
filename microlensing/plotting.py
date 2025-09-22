@@ -61,7 +61,7 @@ def plot_event(event_df, lightcurve_df, fig=None, **kwargs):
             ax.axvspan(barlims[0], barlims[1], alpha=0.2, color="tab:gray")
 
     last_event = event_df.loc[event_df.index[-1], "t_end_min"]
-    first_event = event_df.loc[0, "t_start_min"]
+    first_event = event_df.loc[event_df.index[0], "t_start_min"]
     t_delta = last_event - first_event
     axes[0].legend(fontsize=18, loc="upper right")
     axes[1].set_xlabel(f'MJD', fontsize=20)

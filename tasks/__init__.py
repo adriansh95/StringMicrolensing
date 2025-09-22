@@ -14,6 +14,9 @@ from tasks.good_windows_by_duration_task import (
 from tasks.sample_good_windows_task import SampleGoodWindowsTask
 from tasks.random_sample_sources_task import RandomSampleSourcesTask
 from tasks.rubin_sim_emt_task import RubinSimEMTTask
+from tasks.event_stats_task import EventStatsTask
+from tasks.simulated_event_stats_task import SimulatedEventStatsTask
+from tasks.lens_lightcurves_task import LensLightcurvesTask
 
 __all__ = [
     "KDELabelTask",
@@ -27,5 +30,8 @@ __all__ = [
     "GoodWindowsByDurationTask",
     "SampleGoodWindowsTask",
     "RandomSampleSourcesTask",
-    "RubinSimEMTTask"
+    "RubinSimEMTTask",
+    "EventStatsTask",
+    "SimulatedEventStatsTask",
+    "LensLightcurvesTask"
 ]

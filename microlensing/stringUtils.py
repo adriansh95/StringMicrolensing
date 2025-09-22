@@ -22,15 +22,7 @@ class EventCalculator():
     def __init__(self, configDict):
         self.tensions = configDict.get("tensions", np.logspace(-15, -8, num=8))
         self.curlyG = configDict.get("curlyG", 1e2)
-        self.otherGalaxyParams = configDict.get(
-            "otherGalaxyParams", [
-                [
-                    780 * u.kpc,
-                    SkyCoord("00h42m44.3s", "+41d16m9s"),
-                    2 * 1.15e12 * u.solMass
-                ]
-            ]
-        )
+        self.otherGalaxyParams = configDict.get("otherGalaxyParams", [])
         self.sourceSkyCoordinates = configDict.get(
             "sourceSkyCoordinates", None
         )
@@ -143,7 +135,6 @@ class EventCalculator():
                      * (f02 * np.sqrt(a01) / (gamma50 * mu13)**(3/2)) *
                      enhancementIntegral * u.kpc**(-3))
         self.results["eventRates"] = eventRates
-
 
     def _modelDMRho(self, nSteps):
         galaxyCenters = (

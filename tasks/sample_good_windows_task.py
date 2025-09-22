@@ -42,8 +42,8 @@ class SampleGoodWindowsTask(ETLTask):
             Seed for the numpy random number generator
         """
         rng = np.random.default_rng(seed=rng_seed)
-        s = df.xs("start", level=2)
-        e = df.xs("end", level=2)
+        s = df.xs("start", level="boundary")
+        e = df.xs("end", level="boundary")
         time_df = pd.concat([s, e], axis=1)
         time_df.columns = ["start", "end"]
 
@@ -92,50 +92,35 @@ class SampleGoodWindowsTask(ETLTask):
             ) optional:
                 Seed for the numpy random number generator
         """
-        version = args[1]
-        rng_seed = kwargs.get("rng_seed", None)
         summary_table = kwargs["summary_table"]
         n_samples = kwargs["n_samples"]
-        result_data = []
+        rng_seed = kwargs["rng_seed"]
 
-        for bandwidth_type in ["fixed", "variable"]:
-            unimodal_ids = summary_table.loc[
-                (
-                    summary_table[f"{bandwidth_type}_bw_{version}_lc_class"]
-                    == "unimodal"
-                )
-            ].index.to_numpy()
-            filtered_data = data.loc[
-                data.index.get_level_values(0).isin(unimodal_ids)
-            ]
+        mask = (summary_table["root_2_label"] == "unimodal")
+        unimodal_ids = (
+            summary_table.loc[mask].index.get_level_values("objectid")
+        )
+        filtered_data = data.loc[
+            data.index.get_level_values("objectid").isin(unimodal_ids)
+        ]
 
-            if not filtered_data.empty:
-                t_start_data = self.t_start_df(
-                    filtered_data,
-                    n_samples,
-                    rng_seed=rng_seed
-                )
-                result_data.append(
-                    pd.concat(
-                        [t_start_data],
-                        keys=[bandwidth_type],
-                        names=["bandwidth_type"]
-                    )
-                )
-
-        if len(result_data) > 0:
-            result = pd.concat(result_data)
-        else:
+        if filtered_data.empty:
             result = pd.DataFrame(
                 columns=["start", "end", "t_start"],
                 index=pd.MultiIndex.from_arrays(
                     [[], [], []],
-                    names=["bandwidth_type", "objectid", "number"]
+                    names=["batch_number", "objectid", "window_number"]
                 )
+            )
+        else:
+            result = self.t_start_df(
+                filtered_data,
+                n_samples,
+                rng_seed=rng_seed
             )
         return result
 
-    def get_extract_file_path(self, i_tau, version):
+    def get_extract_file_path(self, i_tau):
         """
         Get the extract file path.
 
@@ -143,13 +128,10 @@ class SampleGoodWindowsTask(ETLTask):
         ----------
         i_tau (int):
             Which event duration.
-
-        version (str):
-            Which version of achromaticity requirements.
         """
         result = os.path.join(
             self.extract_dir,
-            f"good_windows_tau{i_tau}_{version}.parquet"
+            f"good_windows_tau{i_tau}.parquet"
         )
         return result
 
@@ -171,43 +153,32 @@ class SampleGoodWindowsTask(ETLTask):
                 A tuple specifying the first (inclusive) and last (inclusive)
                 event durations to process.
 
-            versions (list, optional, default=['v0', 'v1', 'v2']):
-                A list specifying which versions (achromaticity requirements)
-                to process.
-
             n_samples (int, optional, default=100000):
                 The number of windows to sample.
 
             rng_seed (int, optional, default=None):
                 The seed for the numpy random number generator.
         """
+        run_kwargs = {}
         summary_table_path = kwargs.get("summary_table_path", None)
 
         if summary_table_path is None:
             raise ValueError("Argument 'summary_table_path' is required.")
 
-        kwargs["transform"] = {
+        run_kwargs["transform"] = {
             "rng_seed": kwargs.pop("rng_seed", None),
             "n_samples": kwargs.pop("n_samples", 100000),
             "summary_table": pd.read_parquet(
                 summary_table_path,
-                columns=[
-                    "fixed_bw_v0_lc_class",
-                    "fixed_bw_v1_lc_class",
-                    "fixed_bw_v2_lc_class",
-                    "variable_bw_v0_lc_class",
-                    "variable_bw_v1_lc_class",
-                    "variable_bw_v2_lc_class"
-                ]
+                columns=["root_2_label"]
             )
         }
         tau_range = kwargs.get("tau_range", (0, 48))
-        tau_array = np.arange(tau_range[0], tau_range[1] + 1)
-        versions = kwargs.get("versions", ["v0", "v1", "v2"])
-        kwargs["iterables"] = [tau_array, versions]
-        super().run(**kwargs)
+        tau_array = np.arange(tau_range[0], tau_range[1]+1)
+        run_kwargs["iterables"] = [tau_array]
+        super().run(**run_kwargs)
 
-    def get_load_file_path(self, i_tau, version):
+    def get_load_file_path(self, i_tau):
         """
         Get the load file path.
 
@@ -216,11 +187,9 @@ class SampleGoodWindowsTask(ETLTask):
         i_tau (int):
             Which event duration.
 
-        version (str):
-            Which version of achromaticity requirements.
         """
         result = os.path.join(
             self.load_dir,
-            f"sampled_windows_tau{i_tau}_{version}.parquet"
+            f"sampled_windows_tau{i_tau}.parquet"
         )
         return result

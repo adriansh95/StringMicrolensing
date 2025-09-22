@@ -1,0 +1,11 @@
+objectid,text
+number,bigint
+t_start,double precision
+filter,text
+mag_auto,double precision
+magerr_auto,double precision
+mjd,double precision
+exptime,double precision
+mjd_mid,double precision
+true_label,bigint
+cluster_label,bigint

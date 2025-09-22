@@ -4,7 +4,7 @@ to be run. it just provides a template from which other
 ETLTasks can be easily written.
 """
 import os
-from utils.tasks.etl_task import ETLTask
+from pipeline.etl_task import ETLTask
 
 class TemplateTask(ETLTask):
     """
@@ -66,7 +66,7 @@ class TemplateTask(ETLTask):
         ----------
         """
         result = os.path.join(
-            self.extract_dir,
+            self.load_dir,
             "load_stem.parquet"
         )
         return result
