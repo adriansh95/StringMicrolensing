@@ -15,7 +15,7 @@ class EffectiveMonitoringTimeTask(ETLTask):
     sums these differences to compute the total effective
     monitoring time.
     """
-    DEFAULT_ITERABLES = (0, 66)
+    DEFAULT_ITERABLES = (0, 132)
 
     def transform(self, data, i_batch, **kwargs):
         """
