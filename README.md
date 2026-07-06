@@ -36,7 +36,8 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 
 ## ETL Pipeline
 This repository includes a modular ETL pipeline for scientific data processing. It is built around a base `ETLTask`
-class. Subclasses ("tasks") define a transformation from input data products to output data products.
+class. Subclasses ("tasks") define a transformation from input data products to output data products. An illustrative
+workflow diagram is as follows:
 
 ```mermaid
 graph TD;
