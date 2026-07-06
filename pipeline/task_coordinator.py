@@ -88,7 +88,7 @@ class TaskCoordinator:
             task_instance = task_cls(
                 *init_args,
                 **init_kwargs
-                )
+            )
 
             if do_run:
                 task_instance.run(**run_kwargs)
