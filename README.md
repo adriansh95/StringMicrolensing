@@ -49,7 +49,7 @@ graph TD;
     D --> E2[ETLTask B]
     D --> E3[ETLTask C]
 
-    P0[Survey Data (Parquet)] --> E1[ETLTask A]
+    P0["Survey Data (Parquet)"] --> E1[ETLTask A]
     P0 --> E2[ETLTask B]
     P0 --> E3[ETLTask C]
 
