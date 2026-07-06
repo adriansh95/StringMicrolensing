@@ -12,11 +12,12 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 
 - Modular ETL pipeline
 - YAML-specified task configuration and execution
-- Dynamic task registration and discovery
+- Dynamic task discovery and registration
 - Tools for processing astronomical survey data
 - Monte Carlo simulation and survey sensitivity estimation
 - Intermediate data products stored as Parquet files
 - Unit tests written with `pytest`
+- Example workflow with a small demonstration dataset (planned)
 
 ## Repository Structure
 
@@ -27,3 +28,18 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 | `microlensing/` | Shared helper functions |
 | `notebooks/` | Visualization and exploratory analysis |
 | `tests/` | Unit tests for the ETL framework and supporting code |
+| `scripts/` | Utility scripts used during data preparation. |
+| `demo/` (planned) | Example dataset and workflow demonstrating the pipeline |
+
+## Quick Start
+(planned)
+
+## ETL Pipeline
+This repository includes a modular ETL pipeline for scientific data processing. It is built around a base `ETLTask`
+class. Subclasses ("tasks") define a transformation from input data products to output data products.
+
+```mermaid
+graph TD;
+    A[YAML workflow config] --> C[run_tasks.py]
+    B[Task module] --> C
+    C --> D[TaskCoordinator]
