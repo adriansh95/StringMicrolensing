@@ -64,8 +64,8 @@ class TaskCoordinator:
         Example:
             task_list = ["task1", "task2"]
             task_arguments = [
-                {"init_args": ["/input1", "/output1"], "run_kwargs": {"batch_range": (0, 10)}},
-                {"init_args": ["/input2", "/output2"], "init_kwargs": {"option": True}}
+                {"init_args": ["input1", "output1"], "run_kwargs": {"batch_range": (0, 10)}},
+                {"init_args": ["input2", "output2"], "init_kwargs": {"option": True}}
             ]
             task_run = [True, True]
             task_concat = [False, True]
@@ -88,7 +88,7 @@ class TaskCoordinator:
             task_instance = task_cls(
                 *init_args,
                 **init_kwargs
-                )
+            )
 
             if do_run:
                 task_instance.run(**run_kwargs)

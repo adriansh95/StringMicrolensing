@@ -66,17 +66,28 @@ class EventCalculator():
         positionString,
         impactParameter
     ):
-        hostGalaxyCenter = EventCalculator.skyCoordinatesToCartesian(hostGalaxySkyCoordinates)
+        hostGalaxyCenter = EventCalculator.skyCoordinatesToCartesian(
+            hostGalaxySkyCoordinates
+        )
         impactVector = np.cross(hostGalaxyCenter, [1, 0, 0])
         impactVectorNormalized = impactVector / np.linalg.norm(impactVector)
 
         if positionString == "behind":
-            sourcePositionVector = hostGalaxyCenter + impactParameter * impactVectorNormalized
-            sourcePositionVectorNormalized = sourcePositionVector / np.linalg.norm(sourcePositionVector)
-            sourcePositionVector += np.sqrt(sourceDistanceFromHostGalaxy**2
-                                            - impactParameter**2) * sourcePositionVectorNormalized
+            sourcePositionVector = (
+                hostGalaxyCenter + impactParameter * impactVectorNormalized
+            )
+            sourcePositionVectorNormalized = (
+                sourcePositionVector / np.linalg.norm(sourcePositionVector)
+            )
+            sourcePositionVector += (
+                np.sqrt(sourceDistanceFromHostGalaxy**2 - impactParameter**2)
+                * sourcePositionVectorNormalized
+            )
         elif positionString == "plane":
-            sourcePositionVector = hostGalaxyCenter + sourceDistanceFromHostGalaxy * impactVectorNormalized
+            sourcePositionVector = (
+                hostGalaxyCenter +
+                sourceDistanceFromHostGalaxy * impactVectorNormalized
+            )
         elif positionString == "front":
             hostGalaxyCenterNormalized = (
                 hostGalaxyCenter / np.linalg.norm(hostGalaxyCenter)
@@ -216,24 +227,26 @@ class EventCalculator():
         ) * (u.solMass / u.kpc**3)
         self.results["dmRho"] = dmHalos.sum(axis=0)
 
-    def plotEnhancement(self, title=None):
-        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-        colors = cm.gist_rainbow(np.linspace(0, 1, num=len(self.tensions)))
+    def plotEnhancement(self, ax=None):
+        if ax == None:
+            fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
+        colors = cm.gist_rainbow(np.linspace(0, 1, num=len(self.tensions)))
         enhancement = self.results["enhancementFactor"]
         x = self.results["lineOfSight"]
 
         for f, t, c in zip(enhancement, self.tensions, colors):
-            ax.semilogy(np.linalg.norm(x, axis=0), f, label=f"{t}", color=c)
+            ax.semilogy(
+                np.linalg.norm(x, axis=0),
+                f,
+                label=r"$\frac{G\mu}{c^2} = $" + f"{t}",
+                color=c
+            )
             ax.set_ylabel(r"Enhancement Factor $\mathcal{F}(r)$", fontsize=18)
 
-        ax.legend(fontsize=14)
-
-        if title is not None:
-            fig.suptitle(title, fontsize=24)
         ax.set_xlabel(f"Distance Along Line of Sight ({x.unit})", fontsize=18)
         ax.tick_params(labelsize=16)
-        plt.show(fig)
+        return ax
 
     def sampleDistances(self, seed=None, nSamples=10000, plot=False):
         cdf = (np.cumsum(self.results["enhancementFactor"], axis=1) /

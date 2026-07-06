@@ -1,0 +1,12 @@
+tasks:
+  - name: DummyTask0
+    arguments:
+      alpha: 3
+    do_run: true
+    do_concat: false
+
+  - name: DummyTask1
+    arguments:
+      batch: 1
+    do_run: false
+    do_concat: true

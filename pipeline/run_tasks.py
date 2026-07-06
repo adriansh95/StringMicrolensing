@@ -72,7 +72,7 @@ def register_all_tasks(task_coordinator, tasks_path):
     else:
         raise ImportError(f"Module {module_name} has no __all__ defined.")
 
-if __name__ == "__main__":
+def main():
     # Parse arguments
     parser = argparse.ArgumentParser(description="Run ETL tasks.")
     parser.add_argument(
@@ -113,3 +113,6 @@ if __name__ == "__main__":
 
     # Run tasks
     coordinator.run_tasks(task_names, task_arguments, do_run, do_concat)
+
+if __name__ == "__main__":
+    main()
