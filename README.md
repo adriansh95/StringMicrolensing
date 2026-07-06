@@ -42,4 +42,27 @@ class. Subclasses ("tasks") define a transformation from input data products to 
 graph TD;
     A[YAML workflow config] --> C[run_tasks.py]
     B[Task module] --> C
+
     C --> D[TaskCoordinator]
+
+    D --> E1[ETLTask A]
+    D --> E2[ETLTask B]
+    D --> E3[ETLTask C]
+
+    P1[Parquet A] --> E1[ETLTask A]
+    P1 --> E2[ETLTask B]
+    P1 --> E3[ETLTask C]
+
+    E1 --> P2[Parquet B]
+    E2 --> P3[Parquet C]
+    E3 --> P4[Parquet D]
+
+    P2 --> E4[ETLTask D]
+    P3 --> E4
+
+    E4 --> P5[Parquet E]
+
+    P4 --> N[Jupyter Notebook]
+    P5 --> N
+
+    N --> O[Plots / Figures]
