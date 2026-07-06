@@ -49,18 +49,18 @@ graph TD;
     D --> E2[ETLTask B]
     D --> E3[ETLTask C]
 
-    P1[Parquet A] --> E1[ETLTask A]
-    P1 --> E2[ETLTask B]
-    P1 --> E3[ETLTask C]
+    P0[Survey Data (Parquet)] --> E1[ETLTask A]
+    P0 --> E2[ETLTask B]
+    P0 --> E3[ETLTask C]
 
-    E1 --> P2[Parquet B]
-    E2 --> P3[Parquet C]
-    E3 --> P4[Parquet D]
+    E1 --> P1[Parquet A]
+    E2 --> P2[Parquet B]
+    E3 --> P3[Parquet C]
 
-    P2 --> E4[ETLTask D]
-    P3 --> E4
+    P1 --> E4[ETLTask D]
+    P2 --> E4
 
-    E4 --> P5[Parquet E]
+    E4 --> P4[Parquet D]
 
     P4 --> N[Jupyter Notebook]
     P5 --> N
