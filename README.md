@@ -11,11 +11,11 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 ## Features
 
 - Modular ETL pipeline
-- YAML-specified task configuration and execution
+- YAML-configured workflows
 - Dynamic task discovery and registration
+- Intermediate data products stored as Parquet files
 - Tools for processing astronomical survey data
 - Monte Carlo simulation and survey sensitivity estimation
-- Intermediate data products stored as Parquet files
 - Unit tests written with `pytest`
 - Example workflow with a small demonstration dataset (planned)
 
@@ -30,9 +30,8 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 | `tests/` | Unit tests for the ETL framework and supporting code |
 | `scripts/` | Utility scripts used during data preparation. |
 | `demo/` (planned) | Example dataset and workflow demonstrating the pipeline |
+| `task_yamls/` | YAML workflow configurations for ETL pipelines |
 
-## Quick Start
-(planned)
 
 ## ETL Pipeline
 This repository includes a modular ETL pipeline for scientific data processing. It is built around a base `ETLTask`
@@ -46,19 +45,19 @@ graph TD;
 
     C --> D[TaskCoordinator]
 
-    D --> E1[ETLTask A]
-    D --> E2[ETLTask B]
-    D --> E3[ETLTask C]
+    D --> E1[Task A]
+    D --> E2[Task B]
+    D --> E3[Task C]
 
-    P0["Survey Data (Parquet)"] --> E1[ETLTask A]
-    P0 --> E2[ETLTask B]
-    P0 --> E3[ETLTask C]
+    P0["Survey Data (Parquet)"] --> E1[Task A]
+    P0 --> E2[Task B]
+    P0 --> E3[Task C]
 
     E1 --> P1[Parquet A]
     E2 --> P2[Parquet B]
     E3 --> P3[Parquet C]
 
-    P1 --> E4[ETLTask D]
+    P1 --> E4[Task D]
     P2 --> E4
 
     E4 --> P4[Parquet D]
@@ -67,3 +66,6 @@ graph TD;
     P3 --> N
 
     N --> O[Plots / Figures]
+
+## Quick Start
+(planned)
