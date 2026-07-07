@@ -16,3 +16,4 @@ rubin_sim_yamls/
 logs/
 analyses/
 notebooks/*
+.ipynb_checkpoints
