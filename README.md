@@ -66,6 +66,7 @@ graph TD;
     P3 --> N
 
     N --> O[Plots / Figures]
+```
 
 ## Quick Start (Demo)
 
