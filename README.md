@@ -67,5 +67,53 @@ graph TD;
 
     N --> O[Plots / Figures]
 
-## Quick Start
-(planned)
+## Quick Start (Demo)
+
+Clone the repository:
+
+```bash
+git clone https://github.com/adriansh95/StringMicrolensing.git
+cd StringMicrolensing/demo
+```
+
+Create and activate a Python virtual environment (recommended):
+
+```bash
+python3 -m venv .venv
+
+# Linux/macOS
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+```
+
+Install the dependencies:
+
+```bash
+pip install -r demo_requirements.txt
+```
+
+Run the demonstration workflow:
+
+```bash
+python ../pipeline/run_tasks.py \
+    --task-module demo_tasks \
+    --task-yaml demo_yaml/demo.yaml
+```
+
+Launch Jupyter:
+
+```bash
+jupyter notebook --notebook-dir=notebooks/
+```
+
+Open `Demo_plots.ipynb` and run all cells.
+
+You should obtain the figure shown below.
+
+Once you're done you can remove the virtual environment:
+
+```bash
+rm -rf .venv
+```
