@@ -44,7 +44,8 @@ class GoodWindowsTask(ETLTask):
         "transform": {
             "duration_bin_bounds": [1e-4, 1e4],
             "n_duration_bins": 50,
-            "bound_both_sides": True
+            "bound_both_sides": True,
+            "sample_frac": 0.01
         }
     }
 
@@ -114,7 +115,7 @@ class GoodWindowsTask(ETLTask):
         data.sort_values(by=["objectid", "mjd"], inplace=True)
         data["filter_index"] = data["filter"].apply(filter_map)
         objects = pd.Series(data["objectid"].unique())
-        sampled_objects = objects.sample(frac=0.01)
+        sampled_objects = objects.sample(frac=kwargs["sample_frac"])
         data = data.loc[data["objectid"].isin(sampled_objects)]
         g = data.groupby(by="objectid")
         transformed_data = g.apply(

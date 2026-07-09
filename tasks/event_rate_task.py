@@ -115,7 +115,7 @@ class EventRateTask(ETLTask):
             ],
             "tensions": np.logspace(
                 *kwargs["log_tension_bounds"],
-                num=n_tensions
+                num=kwargs["n_tensions"]
             )
         }
         distance_func = kwargs["distance_func"]
