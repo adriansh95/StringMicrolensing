@@ -74,7 +74,10 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/adriansh95/StringMicrolensing.git
-cd StringMicrolensing/demo
+
+cd StringMicrolensing/
+
+source setup.sh
 ```
 
 Create and activate a Python virtual environment (recommended):
@@ -83,6 +86,8 @@ Create and activate a Python virtual environment (recommended):
 python3 -m venv .venv
 
 source .venv/bin/activate
+
+cd demo/
 ```
 
 Install the dependencies:
@@ -110,8 +115,10 @@ Open `Demo_plots.ipynb` and run all cells.
 You should obtain the figure shown below:
 ![Demo output](demo/plots/event_rate.png)
 
-Once you're done you can remove the virtual environment:
+Once you're done you can leave and remove the virtual environment:
 
 ```bash
+deactivate
+
 rm -rf .venv
 ```
