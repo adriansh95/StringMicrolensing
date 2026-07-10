@@ -96,6 +96,13 @@ Install the dependencies:
 pip install -r demo_requirements.txt
 ```
 
+Install the notebook kernel:
+```bash
+python -m ipykernel install --user \
+    --name stringmicrolensing-demo \
+    --display-name "StringMicrolensing Demo"
+```
+
 Run the demonstration workflow:
 
 ```bash
@@ -103,7 +110,7 @@ python ../pipeline/run_tasks.py \
     --task-module demo_tasks \
     --task-yaml demo_yaml/demo.yaml
 ```
-It takes about a minute to run. 
+It takes about a minute to run. You'll see output.
 
 Launch Jupyter:
 
