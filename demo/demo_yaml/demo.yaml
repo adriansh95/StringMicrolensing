@@ -1,0 +1,32 @@
+tasks:
+  - name: KDELabel
+    arguments:
+      init_args:
+        - lightcurves/
+        - results/kde_labelled_lightcurves/
+      run_kwargs:
+        batch_range: [0, 9]
+  - name: GoodWindows
+    arguments:
+      init_args:
+        - results/kde_labelled_lightcurves/
+        - results/good_windows/
+      run_kwargs:
+        batch_range: [0, 9]
+        scanner_plugin_file: ../emt_plugins/unique_min_2x1.py
+        sample_frac: 1
+  - name: EffectiveMonitoringTime
+    arguments:
+      init_args:
+        - results/good_windows/
+        - results/effective_monitoring_time/
+      run_kwargs:
+        batch_range: [0, 9]
+        sampled_ids_file: objects/sampled_objects.parquet
+  - name: EventRate
+    arguments:
+      init_args:
+        - objects/
+        - results/event_rate/
+      run_kwargs:
+        source_distance: 50
