@@ -103,6 +103,7 @@ python ../pipeline/run_tasks.py \
     --task-module demo_tasks \
     --task-yaml demo_yaml/demo.yaml
 ```
+It takes about a minute to run. 
 
 Launch Jupyter:
 
@@ -115,7 +116,7 @@ Open `Demo_plots.ipynb` and run all cells.
 You should obtain the figure shown below:
 ![Demo output](demo/plots/event_rate.png)
 
-Once you're done you can leave and remove the virtual environment:
+Once you're done you can deactivate and remove the virtual environment:
 
 ```bash
 deactivate
