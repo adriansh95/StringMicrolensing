@@ -18,8 +18,11 @@ from tasks.simulated_event_stats_task import SimulatedEventStatsTask
 from tasks.lens_lightcurves_task import LensLightcurvesTask
 try:
     from tasks.rubin_sim_emt_task import RubinSimEMTTask
-except ImportError:
-    RubinSimEMTTask = None
+except ModuleNotFoundError as e:
+    if e.name != "rubin_sim":
+        raiseexcept ImportError:
+    else:
+        RubinSimEMTTask = None
 
 __all__ = [
     "KDELabelTask",
