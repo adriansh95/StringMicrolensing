@@ -82,11 +82,7 @@ Create and activate a Python virtual environment (recommended):
 ```bash
 python3 -m venv .venv
 
-# Linux/macOS
 source .venv/bin/activate
-
-# Windows
-.venv\Scripts\activate
 ```
 
 Install the dependencies:
@@ -111,7 +107,8 @@ jupyter notebook --notebook-dir=notebooks/
 
 Open `Demo_plots.ipynb` and run all cells.
 
-You should obtain the figure shown below.
+You should obtain the figure shown below:
+![Demo output](demo/plots/event_rate.png)
 
 Once you're done you can remove the virtual environment:
 
