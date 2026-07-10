@@ -19,10 +19,10 @@ from tasks.lens_lightcurves_task import LensLightcurvesTask
 try:
     from tasks.rubin_sim_emt_task import RubinSimEMTTask
 except ModuleNotFoundError as e:
-    if e.name != "rubin_sim":
-        raiseexcept ImportError:
-    else:
+    if e.name == "rubin_sim":
         RubinSimEMTTask = None
+    else:
+        raise
 
 __all__ = [
     "KDELabelTask",
