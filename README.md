@@ -110,7 +110,7 @@ python ../pipeline/run_tasks.py \
     --task-module demo_tasks \
     --task-yaml demo_yaml/demo.yaml
 ```
-It takes about a minute to run. You'll see output.
+It can take up to a couple minutes to run. You'll see output.
 
 Launch Jupyter:
 
@@ -118,7 +118,7 @@ Launch Jupyter:
 jupyter notebook --notebook-dir=notebooks/
 ```
 
-Open `Demo_plots.ipynb` and run all cells.
+Open `Demo_plots.ipynb`, select the StringMicrolensing Demo kernel (top right) and run all cells.
 
 You should obtain the figure shown below:
 ![Demo output](demo/plots/event_rate.png)
