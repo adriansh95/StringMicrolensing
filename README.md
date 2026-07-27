@@ -69,8 +69,7 @@ graph TD;
 ```
 
 ## Quick Start (Demo)
-### Note: this demo assumes you already have python (Recommend version 3.10 - 3.14)
-and jupyter notebook installed.
+### Note: this demo assumes you already have python (Recommend version 3.10 - 3.14) and jupyter notebook installed.
 
 Clone the repository:
 
