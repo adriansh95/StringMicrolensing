@@ -17,7 +17,7 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 - Tools for processing astronomical survey data
 - Monte Carlo simulation and survey sensitivity estimation
 - Unit tests written with `pytest`
-- Example workflow with a small demonstration dataset (planned)
+- Example workflow with a small demonstration dataset
 
 ## Repository Structure
 
@@ -29,7 +29,7 @@ components (`ETLTask`s) that can be combined into user-defined workflows.
 | `notebooks/` | Visualization and exploratory analysis |
 | `tests/` | Unit tests for the ETL framework and supporting code |
 | `scripts/` | Utility scripts used during data preparation. |
-| `demo/` (planned) | Example dataset and workflow demonstrating the pipeline |
+| `demo/` | Example dataset and workflow demonstrating the pipeline |
 | `task_yamls/` | YAML workflow configurations for ETL pipelines |
 
 
@@ -69,14 +69,18 @@ graph TD;
 ```
 
 ## Quick Start (Demo)
+### Note: this demo assumes you already have python (Recommend version 3.10 - 3.14)
+and jupyter notebook installed.
 
 Clone the repository:
 
 ```bash
 git clone https://github.com/adriansh95/StringMicrolensing.git
-
+```
+```bash
 cd StringMicrolensing/
-
+```
+```bash
 source setup.sh
 ```
 
@@ -84,9 +88,11 @@ Create and activate a Python virtual environment (recommended):
 
 ```bash
 python3 -m venv .venv
-
+```
+```bash
 source .venv/bin/activate
-
+```
+```bash
 cd demo/
 ```
 
@@ -127,6 +133,7 @@ Once you're done you can deactivate and remove the virtual environment:
 
 ```bash
 deactivate
-
+```
+```bash
 rm -rf .venv
 ```
